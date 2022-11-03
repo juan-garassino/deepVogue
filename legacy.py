@@ -12,7 +12,7 @@ import re
 import copy
 import numpy as np
 import torch
-import dnnlib
+import deep_neuronal_net_utils
 from torch_utils import misc
 
 # ----------------------------------------------------------------------------
@@ -72,7 +72,7 @@ def load_network_pkl(f, force_fp16=False, custom=False, **ex_kwargs):
             old = data[key]
             kwargs = copy.deepcopy(old.init_kwargs)
             if key.startswith("G"):
-                kwargs.synthesis_kwargs = dnnlib.EasyDict(
+                kwargs.synthesis_kwargs = deep_neuronal_net_utils.EasyDict(
                     kwargs.get("synthesis_kwargs", {})
                 )
                 kwargs.synthesis_kwargs.num_fp16_res = 4
@@ -90,13 +90,13 @@ def load_network_pkl(f, force_fp16=False, custom=False, **ex_kwargs):
 # ----------------------------------------------------------------------------
 
 
-class _TFNetworkStub(dnnlib.EasyDict):
+class _TFNetworkStub(deep_neuronal_net_utils.EasyDict):
     pass
 
 
 class _LegacyUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
-        if module == "dnnlib.tflib.network" and name == "Network":
+        if module == "deep_neuronal_net_utils.tflib.network" and name == "Network":
             return _TFNetworkStub
         return super().find_class(module, name)
 
@@ -151,15 +151,19 @@ def custom_generator(data, **ex_kwargs):
         fmap_base = data["G_ema"].synthesis.fmap_base
     except:  # default from original configs
         fmap_base = 32768 if data["G_ema"].img_resolution >= 512 else 16384
-    kwargs = dnnlib.EasyDict(
+    kwargs = deep_neuronal_net_utils.EasyDict(
         z_dim=data["G_ema"].z_dim,
         c_dim=data["G_ema"].c_dim,
         w_dim=data["G_ema"].w_dim,
         img_resolution=data["G_ema"].img_resolution,
         img_channels=data["G_ema"].img_channels,
         init_res=[4, 4],  # hacky
-        mapping_kwargs=dnnlib.EasyDict(num_layers=data["G_ema"].mapping.num_layers),
-        synthesis_kwargs=dnnlib.EasyDict(channel_base=fmap_base, **ex_kwargs),
+        mapping_kwargs=deep_neuronal_net_utils.EasyDict(
+            num_layers=data["G_ema"].mapping.num_layers
+        ),
+        synthesis_kwargs=deep_neuronal_net_utils.EasyDict(
+            channel_base=fmap_base, **ex_kwargs
+        ),
     )
     G_out = networks.Generator(**kwargs).eval().requires_grad_(False)
     misc.copy_params_and_buffers(data["G_ema"], G_out, require_all=False)
@@ -182,13 +186,13 @@ def convert_tf_generator(tf_G, custom=False, **ex_kwargs):
         return val if val is not None else none
 
     # Convert kwargs.
-    kwargs = dnnlib.EasyDict(
+    kwargs = deep_neuronal_net_utils.EasyDict(
         z_dim=kwarg("latent_size", 512),
         c_dim=kwarg("label_size", 0),
         w_dim=kwarg("dlatent_size", 512),
         img_resolution=kwarg("resolution", 1024),
         img_channels=kwarg("num_channels", 3),
-        mapping_kwargs=dnnlib.EasyDict(
+        mapping_kwargs=deep_neuronal_net_utils.EasyDict(
             num_layers=kwarg("mapping_layers", 8),
             embed_features=kwarg("label_fmaps", None),
             layer_features=kwarg("mapping_fmaps", None),
@@ -196,7 +200,7 @@ def convert_tf_generator(tf_G, custom=False, **ex_kwargs):
             lr_multiplier=kwarg("mapping_lrmul", 0.01),
             w_avg_beta=kwarg("w_avg_beta", 0.995, none=1),
         ),
-        synthesis_kwargs=dnnlib.EasyDict(
+        synthesis_kwargs=deep_neuronal_net_utils.EasyDict(
             channel_base=kwarg("fmap_base", 16384) * 2,
             channel_max=kwarg("fmap_max", 512),
             num_fp16_res=kwarg("num_fp16_res", 0),
@@ -219,7 +223,7 @@ def convert_tf_generator(tf_G, custom=False, **ex_kwargs):
     # !!! custom
     if custom:
         kwargs.init_res = [4, 4]
-        kwargs.synthesis_kwargs = dnnlib.EasyDict(
+        kwargs.synthesis_kwargs = deep_neuronal_net_utils.EasyDict(
             **kwargs.synthesis_kwargs, **ex_kwargs
         )
     if len(unknown_kwargs) > 0:
@@ -336,7 +340,7 @@ def convert_tf_discriminator(tf_D):
         return tf_kwargs.get(tf_name, default)
 
     # Convert kwargs.
-    kwargs = dnnlib.EasyDict(
+    kwargs = deep_neuronal_net_utils.EasyDict(
         c_dim=kwarg("label_size", 0),
         img_resolution=kwarg("resolution", 1024),
         img_channels=kwarg("num_channels", 3),
@@ -346,19 +350,19 @@ def convert_tf_discriminator(tf_D):
         num_fp16_res=kwarg("num_fp16_res", 0),
         conv_clamp=kwarg("conv_clamp", None),
         cmap_dim=kwarg("mapping_fmaps", None),
-        block_kwargs=dnnlib.EasyDict(
+        block_kwargs=deep_neuronal_net_utils.EasyDict(
             activation=kwarg("nonlinearity", "lrelu"),
             resample_filter=kwarg("resample_kernel", [1, 3, 3, 1]),
             freeze_layers=kwarg("freeze_layers", 0),
         ),
-        mapping_kwargs=dnnlib.EasyDict(
+        mapping_kwargs=deep_neuronal_net_utils.EasyDict(
             num_layers=kwarg("mapping_layers", 0),
             embed_features=kwarg("mapping_fmaps", None),
             layer_features=kwarg("mapping_fmaps", None),
             activation=kwarg("nonlinearity", "lrelu"),
             lr_multiplier=kwarg("mapping_lrmul", 0.1),
         ),
-        epilogue_kwargs=dnnlib.EasyDict(
+        epilogue_kwargs=deep_neuronal_net_utils.EasyDict(
             mbstd_group_size=kwarg("mbstd_group_size", None),
             mbstd_num_channels=kwarg("mbstd_num_features", 1),
             activation=kwarg("nonlinearity", "lrelu"),
@@ -461,7 +465,7 @@ def convert_network_pickle(source, dest, force_fp16):
         --dest=stylegan2-cat-config-f.pkl
     """
     print(f'Loading "{source}"...')
-    with dnnlib.util.open_url(source) as f:
+    with deep_neuronal_net_utils.util.open_url(source) as f:
         data = load_network_pkl(f, force_fp16=force_fp16)
     print(f'Saving "{dest}"...')
     with open(dest, "wb") as f:

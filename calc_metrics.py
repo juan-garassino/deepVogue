@@ -14,20 +14,20 @@ import json
 import tempfile
 import copy
 import torch
-import dnnlib
+import deep_neuronal_net_utils
 
 import legacy
 from metrics import metric_main
 from metrics import metric_utils
-from torch_utils import training_stats
-from torch_utils import custom_ops
-from torch_utils import misc
+from pytorch_utils import training_stats
+from pytorch_utils import custom_ops
+from pytorch_utils import misc
 
 # ----------------------------------------------------------------------------
 
 
 def subprocess_fn(rank, args, temp_dir):
-    dnnlib.util.Logger(should_flush=True)
+    deep_neuronal_net_utils.util.Logger(should_flush=True)
 
     # Init torch.distributed.
     if args.num_gpus > 1:
@@ -49,7 +49,7 @@ def subprocess_fn(rank, args, temp_dir):
                 world_size=args.num_gpus,
             )
 
-    # Init torch_utils.
+    # Init pytorch_utils.
     sync_device = torch.device("cuda", rank) if args.num_gpus > 1 else None
     training_stats.init_multiprocessing(rank=rank, sync_device=sync_device)
     if rank != 0 or not args.verbose:
@@ -186,10 +186,10 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror_x, gpus, verbose):
         ppl_zend     Perceptual path length in Z at path endpoints against cropped image.
         ppl_wend     Perceptual path length in W at path endpoints against cropped image.
     """
-    dnnlib.util.Logger(should_flush=True)
+    deep_neuronal_net_utils.util.Logger(should_flush=True)
 
     # Validate arguments.
-    args = dnnlib.EasyDict(
+    args = deep_neuronal_net_utils.EasyDict(
         metrics=metrics, num_gpus=gpus, network_pkl=network_pkl, verbose=verbose
     )
     if not all(metric_main.is_valid_metric(metric) for metric in args.metrics):
@@ -203,23 +203,25 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror_x, gpus, verbose):
         ctx.fail("--gpus must be at least 1")
 
     # Load network.
-    if not dnnlib.util.is_url(network_pkl, allow_file_urls=True) and not os.path.isfile(
-        network_pkl
-    ):
+    if not deep_neuronal_net_utils.util.is_url(
+        network_pkl, allow_file_urls=True
+    ) and not os.path.isfile(network_pkl):
         ctx.fail("--network must point to a file or URL")
     if args.verbose:
         print(f'Loading network from "{network_pkl}"...')
-    with dnnlib.util.open_url(network_pkl, verbose=args.verbose) as f:
+    with deep_neuronal_net_utils.util.open_url(network_pkl, verbose=args.verbose) as f:
         network_dict = legacy.load_network_pkl(f)
         args.G = network_dict["G_ema"]  # subclass of torch.nn.Module
 
     # Initialize dataset options.
     if data is not None:
-        args.dataset_kwargs = dnnlib.EasyDict(
+        args.dataset_kwargs = deep_neuronal_net_utils.EasyDict(
             class_name="training.dataset.ImageFolderDataset", path=data
         )
     elif network_dict["training_set_kwargs"] is not None:
-        args.dataset_kwargs = dnnlib.EasyDict(network_dict["training_set_kwargs"])
+        args.dataset_kwargs = deep_neuronal_net_utils.EasyDict(
+            network_dict["training_set_kwargs"]
+        )
     else:
         ctx.fail("Could not look up dataset options; please specify --data")
 

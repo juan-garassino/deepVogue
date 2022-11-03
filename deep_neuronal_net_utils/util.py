@@ -133,10 +133,16 @@ def make_cache_dir_path(*paths: str) -> str:
     if "DNNLIB_CACHE_DIR" in os.environ:
         return os.path.join(os.environ["DNNLIB_CACHE_DIR"], *paths)
     if "HOME" in os.environ:
-        return os.path.join(os.environ["HOME"], ".cache", "dnnlib", *paths)
+        return os.path.join(
+            os.environ["HOME"], ".cache", "deep_neuronal_net_utils", *paths
+        )
     if "USERPROFILE" in os.environ:
-        return os.path.join(os.environ["USERPROFILE"], ".cache", "dnnlib", *paths)
-    return os.path.join(tempfile.gettempdir(), ".cache", "dnnlib", *paths)
+        return os.path.join(
+            os.environ["USERPROFILE"], ".cache", "deep_neuronal_net_utils", *paths
+        )
+    return os.path.join(
+        tempfile.gettempdir(), ".cache", "deep_neuronal_net_utils", *paths
+    )
 
 
 # Small util functions

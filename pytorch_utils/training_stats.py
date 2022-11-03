@@ -14,7 +14,7 @@ code."""
 import re
 import numpy as np
 import torch
-import dnnlib
+import deep_neuronal_net_utils
 
 from . import misc
 
@@ -229,16 +229,16 @@ class Collector:
 
     def as_dict(self):
         r"""Returns the averages accumulated between the last two calls to
-        `update()` as an `dnnlib.EasyDict`. The contents are as follows:
+        `update()` as an `deep_neuronal_net_utils.EasyDict`. The contents are as follows:
 
-            dnnlib.EasyDict(
-                NAME = dnnlib.EasyDict(num=FLOAT, mean=FLOAT, std=FLOAT),
+            deep_neuronal_net_utils.EasyDict(
+                NAME = deep_neuronal_net_utils.EasyDict(num=FLOAT, mean=FLOAT, std=FLOAT),
                 ...
             )
         """
-        stats = dnnlib.EasyDict()
+        stats = deep_neuronal_net_utils.EasyDict()
         for name in self.names():
-            stats[name] = dnnlib.EasyDict(
+            stats[name] = deep_neuronal_net_utils.EasyDict(
                 num=self.num(name), mean=self.mean(name), std=self.std(name)
             )
         return stats
