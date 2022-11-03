@@ -1,12 +1,5 @@
-# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
-
 from deepVogue.dataset_tool.tools import *
+
 import io
 import json
 import os
@@ -16,8 +9,8 @@ import numpy as np
 import PIL.Image
 from tqdm import tqdm
 
-
 @click.command()
+
 @click.pass_context
 # --source
 @click.option(
@@ -55,6 +48,7 @@ from tqdm import tqdm
 @click.option("--width", help="Output width", type=int)
 # --height
 @click.option("--height", help="Output height", type=int)
+
 def convert_dataset(
     ctx: click.Context,
     source: str,
@@ -205,7 +199,6 @@ def convert_dataset(
     save_bytes(os.path.join(archive_root_dir, "dataset.json"), json.dumps(metadata))
 
     close_dest()
-
 
 # ----------------------------------------------------------------------------
 

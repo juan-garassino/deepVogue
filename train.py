@@ -927,10 +927,8 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     assert not os.path.exists(args.run_dir)
 
     # Print options.
-    print()
     print("\nℹ️ Training options:")
-    print("\nℹ️" + json.dumps(args, indent=2))
-    print("\nℹ️")
+    # print("\nℹ️" + json.dumps(args, indent=2))
     print("\nℹ️" + f"Output directory:   {args.run_dir}")
     print("\nℹ️" + f"Training data:      {args.training_set_kwargs.path}")
     print("\nℹ️" + f"Training duration:  {args.total_kimg} kimg")
@@ -939,7 +937,6 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print("\nℹ️" + f"Image resolution:   {args.training_set_kwargs.resolution}")
     print("\nℹ️" + f"Conditional model:  {args.training_set_kwargs.use_labels}")
     print("\nℹ️" + f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
-    print("\nℹ️")
 
     # Dry run?
     if dry_run:
