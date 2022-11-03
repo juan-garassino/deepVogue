@@ -17,8 +17,8 @@ import tempfile
 import torch
 import deep_neuronal_net_utils
 
-from training import training_loop
-from metrics import metric_main
+from deepVogue.training import training_loop
+from deepVogue.training.metrics import metric_main
 from pytorch_utils import training_stats
 from pytorch_utils import custom_ops
 
