@@ -160,11 +160,9 @@ def training_loop(
         )
     )
     if rank == 0:
-        print()
         print("\nℹ️ Num images: ", len(training_set))
         print("\nℹ️ Image shape:", training_set.image_shape)
         print("\nℹ️ Label shape:", training_set.label_shape)
-        print()
 
     # Construct networks.
     if rank == 0:
