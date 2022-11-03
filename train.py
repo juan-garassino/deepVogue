@@ -929,17 +929,19 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     # Print options.
     print()
     print("\nℹ️ Training options:")
-    print(json.dumps(args, indent=2))
-    print()
-    print(f"Output directory:   {args.run_dir}")
-    print(f"Training data:      {args.training_set_kwargs.path}")
-    print(f"Training duration:  {args.total_kimg} kimg")
-    print(f"Number of GPUs:     {args.num_gpus}")
-    print(f"Number of images:   {args.training_set_kwargs.max_size}")
-    print(f"Image resolution:   {args.training_set_kwargs.resolution}")
-    print(f"Conditional model:  {args.training_set_kwargs.use_labels}")
-    print(f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
-    print()
+    print("\nℹ️" + json.dumps(args, indent=2))
+    print("\nℹ️")
+    print("\nℹ️" + f"Output directory:   {args.run_dir}")
+    print("\nℹ️" + f"Training data:      {args.training_set_kwargs.path}")
+    print("\nℹ️" + f"Training duration:  {args.total_kimg} kimg")
+    print("\nℹ️" + f"Number of GPUs:     {args.num_gpus}")
+    print("\nℹ️" + f"Number of images:   {args.training_set_kwargs.max_size}")
+    print("\nℹ️" +
+          f"Image resolution:   {args.training_set_kwargs.resolution}")
+    print("\nℹ️" +
+          f"Conditional model:  {args.training_set_kwargs.use_labels}")
+    print("\nℹ️" + f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
+    print("\nℹ️")
 
     # Dry run?
     if dry_run:
