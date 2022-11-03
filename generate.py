@@ -594,7 +594,9 @@ def generate_images(
         label[:, class_idx] = 1
     else:
         if class_idx is not None:
-            print("\nℹ️ warn: --class=lbl ignored when running on an unconditional network")
+            print(
+                "\nℹ️ warn: --class=lbl ignored when running on an unconditional network"
+            )
 
     if process == "image":
         if seeds is None:

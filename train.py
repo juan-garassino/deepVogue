@@ -162,7 +162,7 @@ def setup_training_loop_kwargs(
             args.training_set_kwargs.random_seed = args.random_seed
 
     if mirror_x is None:
-        mirror_x = int(os.environ.get('MIRROR_X'))
+        mirror_x = int(os.environ.get("MIRROR_X"))
 
     assert isinstance(mirror_x, bool)
 
@@ -171,7 +171,7 @@ def setup_training_loop_kwargs(
         args.training_set_kwargs.xflip = True
 
     if mirror_y is None:
-        mirror_y = int(os.environ.get('MIRROR_Y'))
+        mirror_y = int(os.environ.get("MIRROR_Y"))
 
     assert isinstance(mirror_y, bool)
 
@@ -936,10 +936,8 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print("\nℹ️" + f"Training duration:  {args.total_kimg} kimg")
     print("\nℹ️" + f"Number of GPUs:     {args.num_gpus}")
     print("\nℹ️" + f"Number of images:   {args.training_set_kwargs.max_size}")
-    print("\nℹ️" +
-          f"Image resolution:   {args.training_set_kwargs.resolution}")
-    print("\nℹ️" +
-          f"Conditional model:  {args.training_set_kwargs.use_labels}")
+    print("\nℹ️" + f"Image resolution:   {args.training_set_kwargs.resolution}")
+    print("\nℹ️" + f"Conditional model:  {args.training_set_kwargs.use_labels}")
     print("\nℹ️" + f"Dataset x-flips:    {args.training_set_kwargs.xflip}")
     print("\nℹ️")
 
