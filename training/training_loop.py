@@ -193,7 +193,7 @@ def training_loop(
 
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
-        print(f'Resuming from "{resume_pkl}"')
+        print("\nℹ️ " + f'Resuming from "{resume_pkl}"')
         with dnnlib.util.open_url(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
         for name, module in [("G", G), ("D", D), ("G_ema", G_ema)]:
@@ -224,7 +224,7 @@ def training_loop(
 
     # Distribute across GPUs.
     if rank == 0:
-        print(f"Distributing across {num_gpus} GPUs...")
+        print("\nℹ️ " + f"Distributing across {num_gpus} GPUs...")
     ddp_modules = dict()
     for name, module in [
         ("G", G),
@@ -331,7 +331,7 @@ def training_loop(
 
     # Train.
     if rank == 0:
-        print(f"Training for {total_kimg} kimg...")
+        print("\nℹ️ " + f"Training for {total_kimg} kimg...")
         print()
     cur_nimg = nimg
     cur_tick = 0

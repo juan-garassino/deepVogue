@@ -36,7 +36,7 @@ def _should_use_custom_op():
         return False
     if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
         return True
-    warnings.warn(f'grid_sample_gradfix not supported on PyTorch {torch.__version__}. Falling back to torch.nn.functional.grid_sample().')
+    warnings.warn("\nℹ️ " + f'grid_sample_gradfix not supported on PyTorch {torch.__version__}. Falling back to torch.nn.functional.grid_sample().')
     return False
 
 #----------------------------------------------------------------------------
