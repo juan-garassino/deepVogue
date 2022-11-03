@@ -14,7 +14,7 @@ import re
 from typing import List, Optional
 
 import click
-import deep_neuronal_net_utils
+import neuronal_network_utils
 import numpy as np
 from numpy import linalg
 import PIL.Image
@@ -533,7 +533,7 @@ def generate_images(
     else:
         custom = False
 
-    G_kwargs = deep_neuronal_net_utils.EasyDict()
+    G_kwargs = neuronal_network_utils.EasyDict()
     G_kwargs.size = size
     G_kwargs.scale_type = scale_type
 
@@ -562,7 +562,7 @@ def generate_images(
 
     print('Loading networks from "%s"...' % network_pkl)
     device = torch.device("cuda")
-    with deep_neuronal_net_utils.util.open_url(network_pkl) as f:
+    with neuronal_network_utils.util.open_url(network_pkl) as f:
         # G = legacy.load_network_pkl(f)['G_ema'].to(device) # type: ignore
         G = legacy.load_network_pkl(f, custom=custom, **G_kwargs)["G_ema"].to(device)  # type: ignore
 

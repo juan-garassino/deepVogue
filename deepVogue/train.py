@@ -15,7 +15,7 @@ import re
 import json
 import tempfile
 import torch
-import deep_neuronal_net_utils
+import neuronal_network_utils
 
 from deepVogue.training import training_loop
 from deepVogue.training.metrics import metric_main
@@ -68,7 +68,7 @@ def setup_training_loop_kwargs(
     nobench=None,  # Disable cuDNN benchmarking: <bool>, default = False
     workers=None,  # Override number of DataLoader workers: <int>, default = 3
 ):
-    args = deep_neuronal_net_utils.EasyDict()
+    args = neuronal_network_utils.EasyDict()
 
     # ------------------------------------------
     # General options: gpus, snap, metrics, seed
@@ -112,18 +112,18 @@ def setup_training_loop_kwargs(
 
     assert data is not None
     assert isinstance(data, str)
-    args.training_set_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.training_set_kwargs = neuronal_network_utils.EasyDict(
         class_name="training.dataset.ImageFolderDataset",
         path=data,
         use_labels=True,
         max_size=None,
         xflip=False,
     )
-    args.data_loader_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.data_loader_kwargs = neuronal_network_utils.EasyDict(
         pin_memory=True, num_workers=3, prefetch_factor=2
     )
     try:
-        training_set = deep_neuronal_net_utils.util.construct_class_by_name(
+        training_set = neuronal_network_utils.util.construct_class_by_name(
             **args.training_set_kwargs
         )  # subclass of training.dataset.Dataset
         args.training_set_kwargs.resolution = (
@@ -372,7 +372,7 @@ def setup_training_loop_kwargs(
     }
 
     assert cfg in cfg_specs
-    spec = deep_neuronal_net_utils.EasyDict(cfg_specs[cfg])
+    spec = neuronal_network_utils.EasyDict(cfg_specs[cfg])
     if cfg == "auto":
         desc += f"{gpus:d}"
         spec.ref_gpus = gpus
@@ -392,18 +392,18 @@ def setup_training_loop_kwargs(
         assert isinstance(lrate, float)
         spec.lrate = lrate
 
-    args.G_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.G_kwargs = neuronal_network_utils.EasyDict(
         class_name="training.networks.Generator",
         z_dim=512,
         w_dim=512,
-        mapping_kwargs=deep_neuronal_net_utils.EasyDict(),
-        synthesis_kwargs=deep_neuronal_net_utils.EasyDict(),
+        mapping_kwargs=neuronal_network_utils.EasyDict(),
+        synthesis_kwargs=neuronal_network_utils.EasyDict(),
     )
-    args.D_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.D_kwargs = neuronal_network_utils.EasyDict(
         class_name="training.networks.Discriminator",
-        block_kwargs=deep_neuronal_net_utils.EasyDict(),
-        mapping_kwargs=deep_neuronal_net_utils.EasyDict(),
-        epilogue_kwargs=deep_neuronal_net_utils.EasyDict(),
+        block_kwargs=neuronal_network_utils.EasyDict(),
+        mapping_kwargs=neuronal_network_utils.EasyDict(),
+        epilogue_kwargs=neuronal_network_utils.EasyDict(),
     )
     args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(
         spec.fmaps * 32768
@@ -418,13 +418,13 @@ def setup_training_loop_kwargs(
     ) = 256  # clamp activations to avoid float16 overflow
     args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
 
-    args.G_opt_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.G_opt_kwargs = neuronal_network_utils.EasyDict(
         class_name="torch.optim.Adam", lr=spec.lrate, betas=[0, 0.99], eps=1e-8
     )
-    args.D_opt_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.D_opt_kwargs = neuronal_network_utils.EasyDict(
         class_name="torch.optim.Adam", lr=spec.lrate, betas=[0, 0.99], eps=1e-8
     )
-    args.loss_kwargs = deep_neuronal_net_utils.EasyDict(
+    args.loss_kwargs = neuronal_network_utils.EasyDict(
         class_name="training.loss.StyleGAN2Loss", r1_gamma=spec.gamma
     )
 
@@ -598,7 +598,7 @@ def setup_training_loop_kwargs(
 
     assert augpipe in augpipe_specs
     if aug != "noaug":
-        args.augment_kwargs = deep_neuronal_net_utils.EasyDict(
+        args.augment_kwargs = neuronal_network_utils.EasyDict(
             class_name="training.augment.AugmentPipe", **augpipe_specs[augpipe]
         )
 
@@ -681,7 +681,7 @@ def setup_training_loop_kwargs(
 
 
 def subprocess_fn(rank, args, temp_dir):
-    deep_neuronal_net_utils.util.Logger(
+    neuronal_network_utils.util.Logger(
         file_name=os.path.join(args.run_dir, "log.txt"),
         file_mode="a",
         should_flush=True,
@@ -906,7 +906,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
       lsundog256     LSUN Dog trained at 256x256 resolution.
       <PATH or URL>  Custom network pickle.
     """
-    deep_neuronal_net_utils.util.Logger(should_flush=True)
+    neuronal_network_utils.util.Logger(should_flush=True)
 
     # Setup training options.
     try:

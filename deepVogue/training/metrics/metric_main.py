@@ -10,7 +10,7 @@ import os
 import time
 import json
 import torch
-import deep_neuronal_net_utils
+import neuronal_network_utils
 
 from . import metric_utils
 from . import frechet_inception_distance
@@ -61,11 +61,11 @@ def calc_metric(
         results[key] = value
 
     # Decorate with metadata.
-    return deep_neuronal_net_utils.EasyDict(
-        results=deep_neuronal_net_utils.EasyDict(results),
+    return neuronal_network_utils.EasyDict(
+        results=neuronal_network_utils.EasyDict(results),
         metric=metric,
         total_time=total_time,
-        total_time_str=deep_neuronal_net_utils.util.format_time(total_time),
+        total_time_str=neuronal_network_utils.util.format_time(total_time),
         num_gpus=opts.num_gpus,
     )
 

@@ -19,7 +19,7 @@ import PIL.Image
 import torch
 import torch.nn.functional as F
 
-import deep_neuronal_net_utils
+import neuronal_network_utils
 import legacy
 
 
@@ -63,7 +63,7 @@ def project(
 
     # Load VGG16 feature detector.
     url = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
-    with deep_neuronal_net_utils.util.open_url(url) as f:
+    with neuronal_network_utils.util.open_url(url) as f:
         vgg16 = torch.jit.load(f).eval().to(device)
 
     # Features for target image.
@@ -200,7 +200,7 @@ def run_projection(
     # Load networks.
     print('Loading networks from "%s"...' % network_pkl)
     device = torch.device("cuda")
-    with deep_neuronal_net_utils.util.open_url(network_pkl) as fp:
+    with neuronal_network_utils.util.open_url(network_pkl) as fp:
         G = legacy.load_network_pkl(fp)["G_ema"].requires_grad_(False).to(device)  # type: ignore
 
     # Load target image.

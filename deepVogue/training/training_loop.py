@@ -15,7 +15,7 @@ import psutil
 import PIL.Image
 import numpy as np
 import torch
-import deep_neuronal_net_utils
+import neuronal_network_utils
 from pytorch_utils import misc
 from pytorch_utils import training_stats
 from pytorch_utils.ops import conv2d_gradfix
@@ -145,7 +145,7 @@ def training_loop(
     # Load training set.
     if rank == 0:
         print("\nℹ️ Loading training set...")
-    training_set = deep_neuronal_net_utils.util.construct_class_by_name(
+    training_set = neuronal_network_utils.util.construct_class_by_name(
         **training_set_kwargs
     )  # subclass of training.dataset.Dataset
     training_set_sampler = misc.InfiniteSampler(
@@ -173,13 +173,13 @@ def training_loop(
         img_channels=training_set.num_channels,
     )
     G = (
-        deep_neuronal_net_utils.util.construct_class_by_name(**G_kwargs, **common_kwargs)
+        neuronal_network_utils.util.construct_class_by_name(**G_kwargs, **common_kwargs)
         .train()
         .requires_grad_(False)
         .to(device)
     )  # subclass of torch.nn.Module
     D = (
-        deep_neuronal_net_utils.util.construct_class_by_name(**D_kwargs, **common_kwargs)
+        neuronal_network_utils.util.construct_class_by_name(**D_kwargs, **common_kwargs)
         .train()
         .requires_grad_(False)
         .to(device)
@@ -194,7 +194,7 @@ def training_loop(
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
         print("\nℹ️ " + f'Resuming from "{resume_pkl}"')
-        with deep_neuronal_net_utils.util.open_url(resume_pkl) as f:
+        with neuronal_network_utils.util.open_url(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
         for name, module in [("G", G), ("D", D), ("G_ema", G_ema)]:
             misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
@@ -213,7 +213,7 @@ def training_loop(
     ada_stats = None
     if (augment_kwargs is not None) and (augment_p > 0 or ada_target is not None):
         augment_pipe = (
-            deep_neuronal_net_utils.util.construct_class_by_name(**augment_kwargs)
+            neuronal_network_utils.util.construct_class_by_name(**augment_kwargs)
             .train()
             .requires_grad_(False)
             .to(device)
@@ -250,7 +250,7 @@ def training_loop(
     # Setup training phases.
     if rank == 0:
         print("\nℹ️ Setting up training phases...")
-    loss = deep_neuronal_net_utils.util.construct_class_by_name(
+    loss = neuronal_network_utils.util.construct_class_by_name(
         device=device, **ddp_modules, **loss_kwargs
     )  # subclass of training.loss.Loss
     phases = []
@@ -259,25 +259,25 @@ def training_loop(
         ("D", D, D_opt_kwargs, D_reg_interval),
     ]:
         if reg_interval is None:
-            opt = deep_neuronal_net_utils.util.construct_class_by_name(
+            opt = neuronal_network_utils.util.construct_class_by_name(
                 params=module.parameters(), **opt_kwargs
             )  # subclass of torch.optim.Optimizer
             phases += [
-                deep_neuronal_net_utils.EasyDict(name=name + "both", module=module, opt=opt, interval=1)
+                neuronal_network_utils.EasyDict(name=name + "both", module=module, opt=opt, interval=1)
             ]
         else:  # Lazy regularization.
             mb_ratio = reg_interval / (reg_interval + 1)
-            opt_kwargs = deep_neuronal_net_utils.EasyDict(opt_kwargs)
+            opt_kwargs = neuronal_network_utils.EasyDict(opt_kwargs)
             opt_kwargs.lr = opt_kwargs.lr * mb_ratio
             opt_kwargs.betas = [beta**mb_ratio for beta in opt_kwargs.betas]
-            opt = deep_neuronal_net_utils.util.construct_class_by_name(
+            opt = neuronal_network_utils.util.construct_class_by_name(
                 module.parameters(), **opt_kwargs
             )  # subclass of torch.optim.Optimizer
             phases += [
-                deep_neuronal_net_utils.EasyDict(name=name + "main", module=module, opt=opt, interval=1)
+                neuronal_network_utils.EasyDict(name=name + "main", module=module, opt=opt, interval=1)
             ]
             phases += [
-                deep_neuronal_net_utils.EasyDict(
+                neuronal_network_utils.EasyDict(
                     name=name + "reg", module=module, opt=opt, interval=reg_interval
                 )
             ]
@@ -452,7 +452,7 @@ def training_loop(
             f"kimg {training_stats.report0('Progress/kimg', cur_nimg / 1e3):<8.1f}"
         ]
         fields += [
-            f"time {deep_neuronal_net_utils.util.format_time(training_stats.report0('Timing/total_sec', tick_end_time - start_time)):<12s}"
+            f"time {neuronal_network_utils.util.format_time(training_stats.report0('Timing/total_sec', tick_end_time - start_time)):<12s}"
         ]
         fields += [
             f"sec/tick {training_stats.report0('Timing/sec_per_tick', tick_end_time - tick_start_time):<7.1f}"

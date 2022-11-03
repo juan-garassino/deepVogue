@@ -14,7 +14,7 @@ import json
 import tempfile
 import copy
 import torch
-import deep_neuronal_net_utils
+import neuronal_network_utils
 
 import legacy
 from metrics import metric_main
@@ -27,7 +27,7 @@ from pytorch_utils import misc
 
 
 def subprocess_fn(rank, args, temp_dir):
-    deep_neuronal_net_utils.util.Logger(should_flush=True)
+    neuronal_network_utils.util.Logger(should_flush=True)
 
     # Init torch.distributed.
     if args.num_gpus > 1:
@@ -186,10 +186,10 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror_x, gpus, verbose):
         ppl_zend     Perceptual path length in Z at path endpoints against cropped image.
         ppl_wend     Perceptual path length in W at path endpoints against cropped image.
     """
-    deep_neuronal_net_utils.util.Logger(should_flush=True)
+    neuronal_network_utils.util.Logger(should_flush=True)
 
     # Validate arguments.
-    args = deep_neuronal_net_utils.EasyDict(
+    args = neuronal_network_utils.EasyDict(
         metrics=metrics, num_gpus=gpus, network_pkl=network_pkl, verbose=verbose
     )
     if not all(metric_main.is_valid_metric(metric) for metric in args.metrics):
@@ -203,23 +203,23 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror_x, gpus, verbose):
         ctx.fail("--gpus must be at least 1")
 
     # Load network.
-    if not deep_neuronal_net_utils.util.is_url(
+    if not neuronal_network_utils.util.is_url(
         network_pkl, allow_file_urls=True
     ) and not os.path.isfile(network_pkl):
         ctx.fail("--network must point to a file or URL")
     if args.verbose:
         print(f'Loading network from "{network_pkl}"...')
-    with deep_neuronal_net_utils.util.open_url(network_pkl, verbose=args.verbose) as f:
+    with neuronal_network_utils.util.open_url(network_pkl, verbose=args.verbose) as f:
         network_dict = legacy.load_network_pkl(f)
         args.G = network_dict["G_ema"]  # subclass of torch.nn.Module
 
     # Initialize dataset options.
     if data is not None:
-        args.dataset_kwargs = deep_neuronal_net_utils.EasyDict(
+        args.dataset_kwargs = neuronal_network_utils.EasyDict(
             class_name="training.dataset.ImageFolderDataset", path=data
         )
     elif network_dict["training_set_kwargs"] is not None:
-        args.dataset_kwargs = deep_neuronal_net_utils.EasyDict(
+        args.dataset_kwargs = neuronal_network_utils.EasyDict(
             network_dict["training_set_kwargs"]
         )
     else:

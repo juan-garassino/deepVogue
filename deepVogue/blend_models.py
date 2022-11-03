@@ -5,7 +5,7 @@ import click
 from typing import List, Optional
 import torch
 import pickle
-import deep_neuronal_net_utils
+import neuronal_network_utils
 import legacy
 
 
@@ -89,13 +89,13 @@ def create_blended_model(
     out: Optional[str],
 ):
 
-    G_kwargs = deep_neuronal_net_utils.EasyDict()
+    G_kwargs = neuronal_network_utils.EasyDict()
 
-    with deep_neuronal_net_utils.util.open_url(lower_res_pkl) as f:
+    with neuronal_network_utils.util.open_url(lower_res_pkl) as f:
         lo = legacy.load_network_pkl(f, custom=False, **G_kwargs)  # type: ignore
         lo_G, lo_D, lo_G_ema = lo["G"], lo["D"], lo["G_ema"]
 
-    with deep_neuronal_net_utils.util.open_url(higher_res_pkl) as f:
+    with neuronal_network_utils.util.open_url(higher_res_pkl) as f:
         hi = legacy.load_network_pkl(f, custom=False, **G_kwargs)["G_ema"]  # type: ignore
 
     model_out = blend_models(lo_G_ema, hi, model_res, resolution)

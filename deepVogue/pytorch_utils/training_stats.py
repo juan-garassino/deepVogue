@@ -14,7 +14,7 @@ code."""
 import re
 import numpy as np
 import torch
-import deep_neuronal_net_utils
+import neuronal_network_utils
 
 from . import misc
 
@@ -236,9 +236,9 @@ class Collector:
                 ...
             )
         """
-        stats = deep_neuronal_net_utils.EasyDict()
+        stats = neuronal_network_utils.EasyDict()
         for name in self.names():
-            stats[name] = deep_neuronal_net_utils.EasyDict(
+            stats[name] = neuronal_network_utils.EasyDict(
                 num=self.num(name), mean=self.mean(name), std=self.std(name)
             )
         return stats

@@ -11,7 +11,7 @@ import contextlib
 import numpy as np
 import torch
 import warnings
-import deep_neuronal_net_utils
+import neuronal_network_utils
 
 # ----------------------------------------------------------------------------
 # Cached construction of constant tensors. Avoids CPU=>GPU copy when the
@@ -256,7 +256,7 @@ def print_module_summary(module, inputs, max_nesting=3, skip_redundant=True):
         if nesting[0] <= max_nesting:
             outputs = list(outputs) if isinstance(outputs, (tuple, list)) else [outputs]
             outputs = [t for t in outputs if isinstance(t, torch.Tensor)]
-            entries.append(deep_neuronal_net_utils.EasyDict(mod=mod, outputs=outputs))
+            entries.append(neuronal_network_utils.EasyDict(mod=mod, outputs=outputs))
 
     hooks = [mod.register_forward_pre_hook(pre_hook) for mod in module.modules()]
     hooks += [mod.register_forward_hook(post_hook) for mod in module.modules()]

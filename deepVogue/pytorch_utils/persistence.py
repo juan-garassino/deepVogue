@@ -20,7 +20,7 @@ import inspect
 import copy
 import uuid
 import types
-import deep_neuronal_net_utils
+import neuronal_network_utils
 
 # ----------------------------------------------------------------------------
 
@@ -114,7 +114,7 @@ def persistent_class(orig_class):
 
         @property
         def init_kwargs(self):
-            return deep_neuronal_net_utils.EasyDict(copy.deepcopy(self._init_kwargs))
+            return neuronal_network_utils.EasyDict(copy.deepcopy(self._init_kwargs))
 
         def __reduce__(self):
             fields = list(super().__reduce__())
@@ -193,8 +193,8 @@ def _reconstruct_persistent_obj(meta):
     r"""Hook that is called internally by the `pickle` module to unpickle
     a persistent object.
     """
-    meta = deep_neuronal_net_utils.EasyDict(meta)
-    meta.state = deep_neuronal_net_utils.EasyDict(meta.state)
+    meta = neuronal_network_utils.EasyDict(meta)
+    meta.state = neuronal_network_utils.EasyDict(meta.state)
     for hook in _import_hooks:
         meta = hook(meta)
         assert meta is not None
