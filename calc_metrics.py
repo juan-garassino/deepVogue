@@ -89,7 +89,7 @@ def subprocess_fn(rank, args, temp_dir):
 
     # Done.
     if rank == 0 and args.verbose:
-        print("Exiting...")
+        print("\nℹ️ Exiting...")
 
 
 # ----------------------------------------------------------------------------
@@ -130,7 +130,7 @@ class CommaSeparatedList(click.ParamType):
     metavar="PATH",
 )
 @click.option(
-    "--mirror",
+    "--mirror_x",
     help="Whether the dataset was augmented with x-flips during training [default: look up]",
     type=bool,
     metavar="BOOL",
@@ -151,7 +151,7 @@ class CommaSeparatedList(click.ParamType):
     metavar="BOOL",
     show_default=True,
 )
-def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
+def calc_metrics(ctx, network_pkl, metrics, data, mirror_x, gpus, verbose):
     """Calculate quality metrics for previous training run or pretrained network pickle.
 
     Examples:
@@ -163,7 +163,7 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
 
     \b
     # Pre-trained network pickle: specify dataset explicitly, print result to stdout.
-    python calc_metrics.py --metrics=fid50k_full --data=~/datasets/ffhq.zip --mirror=1 \\
+    python calc_metrics.py --metrics=fid50k_full --data=~/datasets/ffhq.zip --mirror_x=1 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
 
     Available metrics:
@@ -226,12 +226,12 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
     # Finalize dataset options.
     args.dataset_kwargs.resolution = args.G.img_resolution
     args.dataset_kwargs.use_labels = args.G.c_dim != 0
-    if mirror is not None:
-        args.dataset_kwargs.xflip = mirror
+    if mirror_x is not None:
+        args.dataset_kwargs.xflip = mirror_x
 
     # Print dataset options.
     if args.verbose:
-        print("Dataset options:")
+        print("\nℹ️ Dataset options:")
         print(json.dumps(args.dataset_kwargs, indent=2))
 
     # Locate run dir.
@@ -243,7 +243,7 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
 
     # Launch processes.
     if args.verbose:
-        print("Launching processes...")
+        print("\nℹ️ Launching processes...")
     torch.multiprocessing.set_start_method("spawn")
     with tempfile.TemporaryDirectory() as temp_dir:
         if args.num_gpus == 1:

@@ -21,7 +21,7 @@
 * **Fakes .jpg**: save yourself a ton of space with fakes during training saved as .jpg instead of .png
 * **Multiple interpolation options**: use `--process="interpolation"`, see `--help` for more options
 * **Easing options for interpolations**: see `--help` for more (this would be a great place for new coders to build additional feautures/options)
-* **Vertical Mirroring**: use `--mirrory=True` to flip training set top to bottom (fixed, thanks [Diego](https://github.com/PDillis/stylegan2-ada-pytorch))
+* **Vertical Mirroring**: use `--mirror_y=True` to flip training set top to bottom (fixed, thanks [Diego](https://github.com/PDillis/stylegan2-ada-pytorch))
 * **Set Initial Augmentation Strength**: use `--initstrength={float value}` to set the initialized strength of augmentations (really helpful when restarting training)
 * **Set Initial Kimg count**: use `--nkimg={int value}` to set the initial kimg count (helpful with restarts)
 * **Closed Form Factorization:** converted from Rosinality repo by [Philip Bizimis](https://github.com/pbizimis); additional video creation features
@@ -298,7 +298,7 @@ The training configuration can be further customized with additional command lin
 
 * `--aug=noaug` disables ADA.
 * `--cond=1` enables class-conditional training (requires a dataset with labels).
-* `--mirror=1` amplifies the dataset with x-flips. Often beneficial, even with ADA.
+* `--mirror_x=1` amplifies the dataset with x-flips. Often beneficial, even with ADA.
 * `--resume=ffhq1024 --snap=10` performs transfer learning from FFHQ trained at 1024x1024.
 * `--resume=~/training-runs/<NAME>/network-snapshot-<INT>.pkl` resumes a previous training run.
 * `--gamma=10` overrides R1 gamma. We recommend trying a couple of different values for each new dataset.
@@ -351,11 +351,11 @@ python calc_metrics.py --metrics=pr50k3_full \
     --network=~/training-runs/00000-ffhq10k-res64-auto1/network-snapshot-000000.pkl
 
 # Pre-trained network pickle: specify dataset explicitly, print result to stdout.
-python calc_metrics.py --metrics=fid50k_full --data=~/datasets/ffhq.zip --mirror=1 \
+python calc_metrics.py --metrics=fid50k_full --data=~/datasets/ffhq.zip --mirror_x=1 \
     --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
 ```
 
-The first example looks up the training configuration and performs the same operation as if `--metrics=pr50k3_full` had been specified during training. The second example downloads a pre-trained network pickle, in which case the values of `--mirror` and `--data` must be specified explicitly.
+The first example looks up the training configuration and performs the same operation as if `--metrics=pr50k3_full` had been specified during training. The second example downloads a pre-trained network pickle, in which case the values of `--mirror_x` and `--data` must be specified explicitly.
 
 Note that many of the metrics have a significant one-off cost when calculating them for the first time for a new dataset (up to 30min). Also note that the evaluation is done using a different random seed each time, so the results will vary if the same metric is computed multiple times.
 

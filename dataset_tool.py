@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 
 def error(msg):
-    print("Error: " + msg)
+    print("\nℹ️ Error: " + msg)
     sys.exit(1)
 
 

@@ -341,7 +341,7 @@ def hw_scales(size, base, n, keep_first_layers=None, verbose=False):
     hw_list = []
 
     if base[0] != base[1] and verbose is True:
-        print(" size", size, "base", base, "start_res", start_res, "n", n)
+        print("\nℹ️  size", size, "base", base, "start_res", start_res, "n", n)
     if keep_first_layers is not None and keep_first_layers > 0:
         for i in range(keep_first_layers):
             hw_list.append(start_res)
@@ -405,7 +405,7 @@ def file_list(path, ext=None, subdir=None):
         elif isinstance(ext, str):
             files = [f for f in files if f.endswith(ext)]
         else:
-            print(" Unknown extension/type for file list!")
+            print("\nℹ️  Unknown extension/type for file list!")
     return sorted([f for f in files if os.path.isfile(f)])
 
 

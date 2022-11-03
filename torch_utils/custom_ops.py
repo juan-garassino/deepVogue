@@ -133,14 +133,14 @@ def get_plugin(module_name, sources, **build_kwargs):
 
     except:
         if verbosity == "brief":
-            print("Failed!")
+            print("\nℹ️ Failed!")
         raise
 
     # Print status and add to cache.
     if verbosity == "full":
         print(f'Done setting up PyTorch plugin "{module_name}".')
     elif verbosity == "brief":
-        print("Done.")
+        print("\nℹ️ Done.")
     _cached_plugins[module_name] = module
     return module
 

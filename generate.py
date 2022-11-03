@@ -182,7 +182,7 @@ def images(
         tp_i = (stop - start) / len(inputs)
 
     for idx, i in enumerate(inputs):
-        print("Generating image for frame %d/%d ..." % (idx, len(inputs)))
+        print("\nℹ️ Generating image for frame %d/%d ..." % (idx, len(inputs)))
 
         if space == "z":
             z = torch.from_numpy(i).to(device)
@@ -319,7 +319,7 @@ def truncation_traversal(
     z = torch.from_numpy(np.asarray(z)).to(device)
 
     while trunc <= stop:
-        print("Generating truncation %0.2f" % trunc)
+        print("\nℹ️ Generating truncation %0.2f" % trunc)
 
         img = G(z, label, truncation_psi=trunc, noise_mode=noise_mode)
         img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
@@ -527,8 +527,8 @@ def generate_images(
 
     # custom size code from https://github.com/eps696/stylegan2ada/blob/master/src/_genSGAN2.py
     if size:
-        print("render custom size: ", size)
-        print("padding method:", scale_type)
+        print("\nℹ️ render custom size: ", size)
+        print("\nℹ️ padding method:", scale_type)
         custom = True
     else:
         custom = False
@@ -571,7 +571,7 @@ def generate_images(
     # Synthesize the result of a W projection.
     if (process == "image") and projected_w is not None:
         if seeds is not None:
-            print("Warning: --seeds is ignored when using --projected-w")
+            print("\nℹ️ Warning: --seeds is ignored when using --projected-w")
         print(f'Generating images from projected W "{projected_w}"')
         ws = np.load(projected_w)["w"]
         ws = torch.tensor(ws, device=device)  # pylint: disable=not-callable
@@ -594,7 +594,7 @@ def generate_images(
         label[:, class_idx] = 1
     else:
         if class_idx is not None:
-            print("warn: --class=lbl ignored when running on an unconditional network")
+            print("\nℹ️ warn: --class=lbl ignored when running on an unconditional network")
 
     if process == "image":
         if seeds is None:

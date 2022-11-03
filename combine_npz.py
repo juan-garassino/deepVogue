@@ -26,7 +26,7 @@ def combine_npz(
     npzs: str,
     outdir: str,
 ):
-    print("Combining .npz files...")
+    print("\nℹ️ Combining .npz files...")
     files = npzs.split(",")
 
     os.makedirs(outdir, exist_ok=True)

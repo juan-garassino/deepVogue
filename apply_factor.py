@@ -234,7 +234,7 @@ if __name__ == "__main__":
             )
             image_grid_eigvec.append(image_group)
 
-        print("Saving image ", os.path.join(args.output, file_name))
+        print("\nℹ️ Saving image ", os.path.join(args.output, file_name))
         grid = utils.save_image(
             torch.cat(image_grid_eigvec, 0),
             os.path.join(args.output, file_name),
@@ -244,7 +244,7 @@ if __name__ == "__main__":
         )
 
     if args.vid:
-        print("Processing videos; this may take a while...")
+        print("\nℹ️ Processing videos; this may take a while...")
 
         str_seed_list = "-".join(str(x) for x in latents)
         str_index_list = "-".join(str(x) for x in index_list_of_eigenvalues)

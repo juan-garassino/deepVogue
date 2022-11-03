@@ -42,8 +42,8 @@ def setup_training_loop_kwargs(
     data=None,  # Training dataset (required): <path>
     cond=None,  # Train conditional model based on dataset labels: <bool>, default = False
     subset=None,  # Train with only N images: <int>, default = all
-    mirror=None,  # Augment dataset with x-flips: <bool>, default = False
-    mirrory=None,  # Augment dataset with y-flips: <bool>, default = False
+    mirror_x=None,  # Augment dataset with x-flips: <bool>, default = False
+    mirror_y=None,  # Augment dataset with y-flips: <bool>, default = False
     # Base config.
     cfg=None,  # Base config: 'auto' (default), 'stylegan2', 'paper256', 'paper512', 'paper1024', 'cifar'
     lrate=None,  # Override learning rate
@@ -107,7 +107,7 @@ def setup_training_loop_kwargs(
     args.random_seed = seed
 
     # -----------------------------------
-    # Dataset: data, cond, subset, mirror
+    # Dataset: data, cond, subset, mirror_x
     # -----------------------------------
 
     assert data is not None
@@ -161,18 +161,22 @@ def setup_training_loop_kwargs(
             args.training_set_kwargs.max_size = subset
             args.training_set_kwargs.random_seed = args.random_seed
 
-    if mirror is None:
-        mirror = False
-    assert isinstance(mirror, bool)
-    if mirror:
-        desc += "-mirror"
+    if mirror_x is None:
+        mirror_x = int(os.environ.get('MIRROR_X'))
+
+    assert isinstance(mirror_x, bool)
+
+    if mirror_x:
+        desc += "-mirror_x"
         args.training_set_kwargs.xflip = True
 
-    if mirrory is None:
-        mirrory = False
-    assert isinstance(mirrory, bool)
-    if mirrory:
-        desc += "-mirrory"
+    if mirror_y is None:
+        mirror_y = int(os.environ.get('MIRROR_Y'))
+
+    assert isinstance(mirror_y, bool)
+
+    if mirror_y:
+        desc += "-mirror_y"
         args.training_set_kwargs.yflip = True
 
     # ------------------------------------
@@ -603,10 +607,10 @@ def setup_training_loop_kwargs(
     # ----------------------------------
 
     resume_specs = {
-        "ffhq256": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res256-mirror-paper256-noaug.pkl",
-        "ffhq512": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res512-mirror-stylegan2-noaug.pkl",
-        "ffhq1024": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res1024-mirror-stylegan2-noaug.pkl",
-        "celebahq256": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/celebahq-res256-mirror-paper256-kimg100000-ada-target0.5.pkl",
+        "ffhq256": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res256-mirror_x-paper256-noaug.pkl",
+        "ffhq512": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res512-mirror_x-stylegan2-noaug.pkl",
+        "ffhq1024": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res1024-mirror_x-stylegan2-noaug.pkl",
+        "celebahq256": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/celebahq-res256-mirror_x-paper256-kimg100000-ada-target0.5.pkl",
         "lsundog256": "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/lsundog-res256-paper256-kimg100000-noaug.pkl",
     }
 
@@ -764,13 +768,13 @@ class CommaSeparatedList(click.ParamType):
     "--subset", help="Train with only N images [default: all]", type=int, metavar="INT"
 )
 @click.option(
-    "--mirror",
+    "--mirror_x",
     help="Enable dataset x-flips [default: false]",
     type=bool,
     metavar="BOOL",
 )
 @click.option(
-    "--mirrory",
+    "--mirror_y",
     help="Augment dataset with y-flips (default: false)",
     type=bool,
     metavar="BOOL",
@@ -876,12 +880,12 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     \b
     # Transfer learn MetFaces from FFHQ using 4 GPUs.
     python train.py --outdir=~/training-runs --data=~/datasets/metfaces.zip \\
-        --gpus=4 --cfg=paper1024 --mirror=1 --resume=ffhq1024 --snap=10
+        --gpus=4 --cfg=paper1024 --mirror_x=1 --resume=ffhq1024 --snap=10
 
     \b
     # Reproduce original StyleGAN2 config F.
     python train.py --outdir=~/training-runs --data=~/datasets/ffhq.zip \\
-        --gpus=8 --cfg=stylegan2 --mirror=1 --aug=noaug
+        --gpus=8 --cfg=stylegan2 --mirror_x=1 --aug=noaug
 
     \b
     Base configs (--cfg):
@@ -924,7 +928,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
 
     # Print options.
     print()
-    print("Training options:")
+    print("\nℹ️ Training options:")
     print(json.dumps(args, indent=2))
     print()
     print(f"Output directory:   {args.run_dir}")
@@ -939,17 +943,17 @@ def main(ctx, outdir, dry_run, **config_kwargs):
 
     # Dry run?
     if dry_run:
-        print("Dry run; exiting.")
+        print("\nℹ️ Dry run; exiting.")
         return
 
     # Create output directory.
-    print("Creating output directory...")
+    print("\nℹ️ Creating output directory...")
     os.makedirs(args.run_dir)
     with open(os.path.join(args.run_dir, "training_options.json"), "wt") as f:
         json.dump(args, f, indent=2)
 
     # Launch processes.
-    print("Launching processes...")
+    print("\nℹ️ Launching processes...")
     torch.multiprocessing.set_start_method("spawn")
     with tempfile.TemporaryDirectory() as temp_dir:
         if args.num_gpus == 1:

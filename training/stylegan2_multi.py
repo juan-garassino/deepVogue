@@ -465,7 +465,7 @@ class SynthesisNetwork(torch.nn.Module):
         if size is None:
             size = custom_res
         if init_res != [4, 4] and verbose:
-            print(" .. init res", init_res, size)
+            print("\nℹ️  .. init res", init_res, size)
         keep_first_layers = 2 if scale_type == "fit" else None
         hws = hw_scales(size, custom_res, self.res_log2 - 2, keep_first_layers, verbose)
         if verbose:

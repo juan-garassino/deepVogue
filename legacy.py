@@ -466,7 +466,7 @@ def convert_network_pickle(source, dest, force_fp16):
     print(f'Saving "{dest}"...')
     with open(dest, "wb") as f:
         pickle.dump(data, f)
-    print("Done.")
+    print("\nℹ️ Done.")
 
 
 # ----------------------------------------------------------------------------

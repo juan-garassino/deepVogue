@@ -14,11 +14,11 @@ Usage: train.py [OPTIONS]
 
   # Transfer learn MetFaces from FFHQ using 4 GPUs.
   python train.py --outdir=~/training-runs --data=~/datasets/metfaces.zip \
-      --gpus=4 --cfg=paper1024 --mirror=1 --resume=ffhq1024 --snap=10
+      --gpus=4 --cfg=paper1024 --mirror_x=1 --resume=ffhq1024 --snap=10
 
   # Reproduce original StyleGAN2 config F.
   python train.py --outdir=~/training-runs --data=~/datasets/ffhq.zip \
-      --gpus=8 --cfg=stylegan2 --mirror=1 --aug=noaug
+      --gpus=8 --cfg=stylegan2 --mirror_x=1 --aug=noaug
 
   Base configs (--cfg):
     auto       Automatically select reasonable defaults based on resolution
@@ -49,7 +49,7 @@ Options:
   --cond BOOL                     Train conditional model based on dataset
                                   labels [default: false]
   --subset INT                    Train with only N images [default: all]
-  --mirror BOOL                   Enable dataset x-flips [default: false]
+  --mirror_x BOOL                   Enable dataset x-flips [default: false]
   --cfg [auto|stylegan2|paper256|paper512|paper1024|cifar]
                                   Base config [default: auto]
   --gamma FLOAT                   Override R1 gamma

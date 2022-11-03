@@ -101,7 +101,7 @@ def generate_style_mix(
 
     os.makedirs(outdir, exist_ok=True)
 
-    print("Generating W vectors...")
+    print("\nℹ️ Generating W vectors...")
     all_seeds = list(set(row_seeds + col_seeds))
     all_z = np.stack([np.random.RandomState(seed).randn(G.z_dim) for seed in all_seeds])
     all_w = G.mapping(torch.from_numpy(all_z).to(device), None)
@@ -109,7 +109,7 @@ def generate_style_mix(
     all_w = w_avg + (all_w - w_avg) * truncation_psi
     w_dict = {seed: w for seed, w in zip(all_seeds, list(all_w))}
 
-    print("Generating images...")
+    print("\nℹ️ Generating images...")
     all_images = G.synthesis(all_w, noise_mode=noise_mode)
     all_images = (
         (all_images.permute(0, 2, 3, 1) * 127.5 + 128)
@@ -122,7 +122,7 @@ def generate_style_mix(
         (seed, seed): image for seed, image in zip(all_seeds, list(all_images))
     }
 
-    print("Generating style-mixed images...")
+    print("\nℹ️ Generating style-mixed images...")
     for row_seed in row_seeds:
         for col_seed in col_seeds:
             w = w_dict[row_seed].clone()
@@ -133,12 +133,12 @@ def generate_style_mix(
             )
             image_dict[(row_seed, col_seed)] = image[0].cpu().numpy()
 
-    print("Saving images...")
+    print("\nℹ️ Saving images...")
     os.makedirs(outdir, exist_ok=True)
     for (row_seed, col_seed), image in image_dict.items():
         PIL.Image.fromarray(image, "RGB").save(f"{outdir}/{row_seed}-{col_seed}.png")
 
-    print("Saving image grid...")
+    print("\nℹ️ Saving image grid...")
     W = G.img_resolution
     H = G.img_resolution
     canvas = PIL.Image.new(

@@ -163,7 +163,7 @@ def ask_yes_no(question: str) -> bool:
     """Ask the user the question until the user inputs a valid answer."""
     while True:
         try:
-            print("{0} [y/n]".format(question))
+            print("\nℹ️ {0} [y/n]".format(question))
             return strtobool(input().lower())
         except ValueError:
             pass
@@ -451,7 +451,7 @@ def open_url(
     url_data = None
     with requests.Session() as session:
         if verbose:
-            print("Downloading %s ..." % url, end="", flush=True)
+            print("\nℹ️ Downloading %s ..." % url, end="", flush=True)
         for attempts_left in reversed(range(num_attempts)):
             try:
                 with session.get(url) as res:
@@ -482,17 +482,17 @@ def open_url(
                     url_name = match[1] if match else url
                     url_data = res.content
                     if verbose:
-                        print(" done")
+                        print("\nℹ️  done")
                     break
             except KeyboardInterrupt:
                 raise
             except:
                 if not attempts_left:
                     if verbose:
-                        print(" failed")
+                        print("\nℹ️  failed")
                     raise
                 if verbose:
-                    print(".", end="", flush=True)
+                    print("\nℹ️ .", end="", flush=True)
 
     # Save to cache.
     if cache:

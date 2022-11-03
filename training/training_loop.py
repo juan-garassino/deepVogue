@@ -144,7 +144,7 @@ def training_loop(
 
     # Load training set.
     if rank == 0:
-        print("Loading training set...")
+        print("\nℹ️ Loading training set...")
     training_set = dnnlib.util.construct_class_by_name(
         **training_set_kwargs
     )  # subclass of training.dataset.Dataset
@@ -161,14 +161,14 @@ def training_loop(
     )
     if rank == 0:
         print()
-        print("Num images: ", len(training_set))
-        print("Image shape:", training_set.image_shape)
-        print("Label shape:", training_set.label_shape)
+        print("\nℹ️ Num images: ", len(training_set))
+        print("\nℹ️ Image shape:", training_set.image_shape)
+        print("\nℹ️ Label shape:", training_set.label_shape)
         print()
 
     # Construct networks.
     if rank == 0:
-        print("Constructing networks...")
+        print("\nℹ️ Constructing networks...")
     common_kwargs = dict(
         c_dim=training_set.label_dim,
         img_resolution=training_set.resolution,
@@ -191,7 +191,7 @@ def training_loop(
     G.update_epochs(
         float(100 * nimg / (total_kimg * 1000))
     )  # 100 total top k "epochs" in total_kimg
-    print("starting G epochs: ", G.epochs)
+    print("\nℹ️ starting G epochs: ", G.epochs)
 
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
@@ -210,7 +210,7 @@ def training_loop(
 
     # Setup augmentation.
     if rank == 0:
-        print("Setting up augmentation...")
+        print("\nℹ️ Setting up augmentation...")
     augment_pipe = None
     ada_stats = None
     if (augment_kwargs is not None) and (augment_p > 0 or ada_target is not None):
@@ -251,7 +251,7 @@ def training_loop(
 
     # Setup training phases.
     if rank == 0:
-        print("Setting up training phases...")
+        print("\nℹ️ Setting up training phases...")
     loss = dnnlib.util.construct_class_by_name(
         device=device, **ddp_modules, **loss_kwargs
     )  # subclass of training.loss.Loss
@@ -295,7 +295,7 @@ def training_loop(
     grid_z = None
     grid_c = None
     if rank == 0:
-        print("Exporting sample images...")
+        print("\nℹ️ Exporting sample images...")
         grid_size, images, labels = setup_snapshot_image_grid(training_set=training_set)
         save_image_grid(
             images,
@@ -317,7 +317,7 @@ def training_loop(
 
     # Initialize logs.
     if rank == 0:
-        print("Initializing logs...")
+        print("\nℹ️ Initializing logs...")
     stats_collector = training_stats.Collector(regex=".*")
     stats_metrics = dict()
     stats_jsonl = None
@@ -329,7 +329,7 @@ def training_loop(
 
             stats_tfevents = tensorboard.SummaryWriter(run_dir)
         except ImportError as err:
-            print("Skipping tfevents export:", err)
+            print("\nℹ️ Skipping tfevents export:", err)
 
     # Train.
     if rank == 0:
@@ -482,14 +482,14 @@ def training_loop(
             "Timing/total_days", (tick_end_time - start_time) / (24 * 60 * 60)
         )
         if rank == 0:
-            print(" ".join(fields))
+            print("\nℹ️  ".join(fields))
 
         # Check for abort.
         if (not done) and (abort_fn is not None) and abort_fn():
             done = True
             if rank == 0:
                 print()
-                print("Aborting...")
+                print("\nℹ️ Aborting...")
 
         # Save image snapshot.
         if (
@@ -539,7 +539,7 @@ def training_loop(
         # Evaluate metrics.
         if (snapshot_data is not None) and (len(metrics) > 0):
             if rank == 0:
-                print("Evaluating metrics...")
+                print("\nℹ️ Evaluating metrics...")
             for metric in metrics:
                 result_dict = metric_main.calc_metric(
                     metric=metric,
@@ -598,7 +598,7 @@ def training_loop(
     # Done.
     if rank == 0:
         print()
-        print("Exiting...")
+        print("\nℹ️ Exiting...")
 
 
 # ----------------------------------------------------------------------------

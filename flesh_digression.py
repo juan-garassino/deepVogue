@@ -95,7 +95,7 @@ def generate_from_generator_adaptive(
         latents_c = rnd.randn(1, G.z_dim)
     else:
         if len(seeds) is not 3:
-            print("you must set 3 seed values!")
+            print("\nℹ️ you must set 3 seed values!")
 
         print(seeds)
         latents_a = np.random.RandomState(int(seeds[0])).randn(1, G.z_dim)
@@ -184,8 +184,8 @@ def main(
 ):
 
     if size:
-        print("render custom size: ", size)
-        print("padding method:", scale_type)
+        print("\nℹ️ render custom size: ", size)
+        print("\nℹ️ padding method:", scale_type)
         custom = True
     else:
         custom = False
