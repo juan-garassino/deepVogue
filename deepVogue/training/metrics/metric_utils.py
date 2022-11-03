@@ -14,7 +14,7 @@ import copy
 import uuid
 import numpy as np
 import torch
-import dnnlib
+import deep_neuronal_net_utils
 
 # ----------------------------------------------------------------------------
 
@@ -33,8 +33,8 @@ class MetricOptions:
     ):
         assert 0 <= rank < num_gpus
         self.G = G
-        self.G_kwargs = dnnlib.EasyDict(G_kwargs)
-        self.dataset_kwargs = dnnlib.EasyDict(dataset_kwargs)
+        self.G_kwargs = deep_neuronal_net_utils.EasyDict(G_kwargs)
+        self.dataset_kwargs = deep_neuronal_net_utils.EasyDict(dataset_kwargs)
         self.num_gpus = num_gpus
         self.rank = rank
         self.device = device if device is not None else torch.device("cuda", rank)
@@ -62,7 +62,7 @@ def get_feature_detector(
         is_leader = rank == 0
         if not is_leader and num_gpus > 1:
             torch.distributed.barrier()  # leader goes first
-        with dnnlib.util.open_url(url, verbose=(verbose and is_leader)) as f:
+        with deep_neuronal_net_utils.util.open_url(url, verbose=(verbose and is_leader)) as f:
             _feature_detector_cache[key] = torch.jit.load(f).eval().to(device)
         if is_leader and num_gpus > 1:
             torch.distributed.barrier()  # others follow
@@ -147,7 +147,7 @@ class FeatureStats:
     @staticmethod
     def load(pkl_file):
         with open(pkl_file, "rb") as f:
-            s = dnnlib.EasyDict(pickle.load(f))
+            s = deep_neuronal_net_utils.EasyDict(pickle.load(f))
         obj = FeatureStats(capture_all=s.capture_all, max_items=s.max_items)
         obj.__dict__.update(s)
         return obj
@@ -195,7 +195,7 @@ class ProgressMonitor:
         )
         if (self.verbose) and (self.tag is not None):
             print(
-                f"{self.tag:<19s} items {cur_items:<7d} time {dnnlib.util.format_time(total_time):<12s} ms/item {time_per_item*1e3:.2f}"
+                f"{self.tag:<19s} items {cur_items:<7d} time {deep_neuronal_net_utils.util.format_time(total_time):<12s} ms/item {time_per_item*1e3:.2f}"
             )
         self.batch_time = cur_time
         self.batch_items = cur_items
@@ -234,7 +234,7 @@ def compute_feature_stats_for_dataset(
     max_items=None,
     **stats_kwargs,
 ):
-    dataset = dnnlib.util.construct_class_by_name(**opts.dataset_kwargs)
+    dataset = deep_neuronal_net_utils.util.construct_class_by_name(**opts.dataset_kwargs)
     if data_loader_kwargs is None:
         data_loader_kwargs = dict(pin_memory=True, num_workers=3, prefetch_factor=2)
 
@@ -250,7 +250,7 @@ def compute_feature_stats_for_dataset(
         )
         md5 = hashlib.md5(repr(sorted(args.items())).encode("utf-8"))
         cache_tag = f"{dataset.name}-{get_feature_detector_name(detector_url)}-{md5.hexdigest()}"
-        cache_file = dnnlib.make_cache_dir_path("gan-metrics", cache_tag + ".pkl")
+        cache_file = deep_neuronal_net_utils.make_cache_dir_path("gan-metrics", cache_tag + ".pkl")
 
         # Check if the file exists (all processes must agree).
         flag = os.path.isfile(cache_file) if opts.rank == 0 else False
@@ -325,7 +325,7 @@ def compute_feature_stats_for_generator(
 
     # Setup generator and load labels.
     G = copy.deepcopy(opts.G).eval().requires_grad_(False).to(opts.device)
-    dataset = dnnlib.util.construct_class_by_name(**opts.dataset_kwargs)
+    dataset = deep_neuronal_net_utils.util.construct_class_by_name(**opts.dataset_kwargs)
 
     # Image generation func.
     def run_generator(z, c):

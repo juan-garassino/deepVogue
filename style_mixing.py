@@ -13,7 +13,7 @@ import re
 from typing import List
 
 import click
-import dnnlib
+import deep_neuronal_net_utils
 import numpy as np
 import PIL.Image
 import torch
@@ -96,7 +96,7 @@ def generate_style_mix(
     """
     print('Loading networks from "%s"...' % network_pkl)
     device = torch.device("cuda")
-    with dnnlib.util.open_url(network_pkl) as f:
+    with deep_neuronal_net_utils.util.open_url(network_pkl) as f:
         G = legacy.load_network_pkl(f)["G_ema"].to(device)  # type: ignore
 
     os.makedirs(outdir, exist_ok=True)

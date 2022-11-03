@@ -12,7 +12,7 @@ import zipfile
 import PIL.Image
 import json
 import torch
-import dnnlib
+import deep_neuronal_net_utils
 
 try:
     import pyspng
@@ -116,7 +116,7 @@ class Dataset(torch.utils.data.Dataset):
         return label.copy()
 
     def get_details(self, idx):
-        d = dnnlib.EasyDict()
+        d = deep_neuronal_net_utils.EasyDict()
         d.raw_idx = int(self._raw_idx[idx])
         d.xflip = int(self._xflip[idx]) != 0
         d.yflip = int(self._yflip[idx]) != 0

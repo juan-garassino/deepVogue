@@ -7,7 +7,7 @@ from torchvision import (
     utils,
 )  # assumes you use torchvision 0.8.2; if you use the latest version, see comments below
 import legacy
-import dnnlib
+import deep_neuronal_net_utils
 from typing import List
 import numpy as np
 import random
@@ -163,13 +163,13 @@ if __name__ == "__main__":
 
     custom = False
 
-    G_kwargs = dnnlib.EasyDict()
+    G_kwargs = deep_neuronal_net_utils.EasyDict()
     G_kwargs.size = None
     G_kwargs.scale_type = "symm"
 
     print('Loading networks from "%s"...' % args.ckpt)
     device = torch.device("cuda")
-    with dnnlib.util.open_url(args.ckpt) as f:
+    with deep_neuronal_net_utils.util.open_url(args.ckpt) as f:
         G = legacy.load_network_pkl(f, custom=custom, **G_kwargs)["G_ema"].to(device)  # type: ignore
 
     if not os.path.exists(args.output):

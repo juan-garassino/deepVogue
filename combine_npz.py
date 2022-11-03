@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import click
 import PIL.Image
-import dnnlib
+import deep_neuronal_net_utils
 import legacy
 
 # ----------------------------------------------------------------------------

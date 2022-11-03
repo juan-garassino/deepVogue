@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from numpy import linalg
 
-import dnnlib
+import deep_neuronal_net_utils
 import legacy
 
 
@@ -190,13 +190,13 @@ def main(
     else:
         custom = False
 
-    G_kwargs = dnnlib.EasyDict()
+    G_kwargs = deep_neuronal_net_utils.EasyDict()
     G_kwargs.size = size
     G_kwargs.scale_type = scale_type
 
     print('Loading networks from "%s"...' % pkl)
     device = torch.device("cuda")
-    with dnnlib.util.open_url(pkl) as f:
+    with deep_neuronal_net_utils.util.open_url(pkl) as f:
         G = legacy.load_network_pkl(f, custom=custom, **G_kwargs)["G_ema"].to(device)  # type: ignore
 
     frames = generate_from_generator_adaptive(

@@ -8,12 +8,12 @@
 
 import numpy as np
 import torch
-from torch_utils import misc
-from torch_utils import persistence
-from torch_utils.ops import conv2d_resample
-from torch_utils.ops import upfirdn2d
-from torch_utils.ops import bias_act
-from torch_utils.ops import fma
+from pytorch_utils import misc
+from pytorch_utils import persistence
+from pytorch_utils.ops import conv2d_resample
+from pytorch_utils.ops import upfirdn2d
+from pytorch_utils.ops import bias_act
+from pytorch_utils.ops import fma
 
 from .networks import FullyConnectedLayer, Conv2dLayer, ToRGBLayer, MappingNetwork
 

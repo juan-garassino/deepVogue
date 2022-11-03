@@ -5,7 +5,7 @@ import click
 import numpy as np
 import torch
 
-import dnnlib
+import deep_neuronal_net_utils
 import legacy
 
 
@@ -62,7 +62,7 @@ def determine_config(state_nv):
 @click.argument("network-pkl")
 @click.argument("output-file")
 def convert(network_pkl, output_file):
-    with dnnlib.util.open_url(network_pkl) as f:
+    with deep_neuronal_net_utils.util.open_url(network_pkl) as f:
         G_nvidia = legacy.load_network_pkl(f)["G_ema"]
 
     state_nv = G_nvidia.state_dict()

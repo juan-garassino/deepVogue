@@ -23,7 +23,7 @@ from PIL import ImageFilter
 import torch
 import torch.nn.functional as F
 
-import dnnlib
+import deep_neuronal_net_utils
 import legacy
 
 image_mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).cuda()
@@ -156,7 +156,7 @@ def project(
     # Load VGG16 feature detector.
     if use_vgg:
         url = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
-        with dnnlib.util.open_url(url) as f:
+        with deep_neuronal_net_utils.util.open_url(url) as f:
             vgg16 = torch.jit.load(f).eval().to(device)
 
     # Load CLIP
@@ -461,7 +461,7 @@ def run_projection(
     # Load networks.
     print('Loading networks from "%s"...' % network_pkl)
     device = torch.device("cuda")
-    with dnnlib.util.open_url(network_pkl) as fp:
+    with deep_neuronal_net_utils.util.open_url(network_pkl) as fp:
         G = legacy.load_network_pkl(fp)["G_ema"].requires_grad_(False).to(device)  # type: ignore
 
     # Load target image.
