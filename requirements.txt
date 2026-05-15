@@ -1,39 +1,35 @@
+# deepVogue — runtime dependencies (lightweight, importable on local CPU box).
+# For Colab/GPU training also install requirements-train.txt.
+
 # packaging
-pip>=9
-setuptools>=26
-twine
-wheel>=0.29
+pip>=21
+setuptools>=42
+wheel>=0.36
 
-# data science
-tensorflow
-numpy
-pandas
-scikit-learn
-matplotlib
-
-# tests/linter
-black
-coverage
-flake8
-pytest
-yapf
-
-# API
-gcsfs
-google-cloud-storage
-mlflow
-s3fs
-
-# utilities
+# CLI / utilities
+click>=8.0
+tqdm
+psutil
+requests
 six>=1.14
 joblib
 memoized-property
 termcolor
-
-protobuf<=3.20
-jupyter
-jupyterlab
 colorama
 
-quad-mesh-simplify
-voxelfuse
+# image / array
+numpy
+scipy
+Pillow
+imageio
+imageio-ffmpeg==0.4.3
+opensimplex
+
+# optional during inference (kept light); training pulls full torch stack via requirements-train.txt
+matplotlib
+
+# tests / linter
+pytest
+coverage
+flake8
+black
