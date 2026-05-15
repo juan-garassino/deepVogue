@@ -1,74 +1,97 @@
-# Data analysis
-- Document here the project: deep-sculpt
-- Description: Project Description
-- Data Source:
-- Type of analysis:
+# deepVogue
 
-Please document the project the better you can.
+Latent-cinema engine built on **StyleGAN3-t** (NVIDIA's translation-equivariant
+generator), with the latent-walk / projection / SeFa / network-blending tooling
+from the SG2-ADA + Schultz lineage ported on top. Designed for Colab + Drive:
+all datasets and outputs live on Drive, the local checkout is for code only.
 
-# Startup the project
+## What you get
 
-The initial setup.
+- Multi-dataset training (`DV_DATASET_NAME=tarot` / `film` / …) — Drive layout
+  keeps every run reproducible and resumable across Colab session expiry.
+- **Inline preprocessing**: ffmpeg-based movie-frame extraction + perceptual-hash
+  dedup; procedural augmentation for tiny stills sets (rotate, crop,
+  hue/sat/val jitter, gold-foil overlay, aged-paper, edge wear) — no external
+  preprocessing package needed.
+- **Latent cinema renderer**: project a sparse stride of frames into W+ →
+  Catmull-Rom (default) / slerp / bezier / linear interpolation between
+  anchors → mp4 in Drive.
+- **FastAPI inference server** + **Telegram bot** running inside the same Colab
+  notebook for on-demand generation and walks.
 
-Create virtualenv and install the project:
+## Install
+
+Local CPU box (code authoring + small dry-runs):
 ```bash
-sudo apt-get install virtualenv python-pip python-dev
-deactivate; virtualenv ~/venv ; source ~/venv/bin/activate ;\
-    pip install pip -U; pip install -r requirements.txt
+pip install -e .
 ```
 
-Unittest test:
+Colab GPU runtime:
 ```bash
-make clean install test
+git clone --depth 1 https://github.com/JuanGarassino/deepVogue /content/deepVogue
+cd /content/deepVogue
+make colab-install              # pip install -e . + apt-get ffmpeg
+make install-serve              # FastAPI + Telegram deps (only if running the bot)
 ```
 
-Check for deep-sculpt in gitlab.com/{group}.
-If your project is not set please add it:
+## Drive layout
 
-- Create a new project on `gitlab.com/{group}/deep-sculpt`
-- Then populate it:
-
-```bash
-##   e.g. if group is "{group}" and project_name is "deep-sculpt"
-git remote add origin git@github.com:{group}/deep-sculpt.git
-git push -u origin master
-git push -u origin --tags
+```
+/MyDrive/deepVogue/
+  data/{tarot,film}/...                 # raw stills or movie files
+  datasets/{tarot,film}/dataset.zip     # prepared SG3-format zips
+                       /frames_index.json   # film only
+  runs/{tarot,film}/<run_id>/network-snapshot-*.pkl
+  anchors/{film}/<frame_id>/projected_w.npz
+  walks/{model_id}/{walk_id}.mp4
+  models.yaml                           # FastAPI registry
 ```
 
-Functionnal test with a script:
+Point your env vars at the Drive root and set `DV_DATASET_NAME=<name>` — every
+path is suffixed automatically. See `CLAUDE.md` for the full env-var table.
+
+## Quickstart on Colab
 
 ```bash
-cd
-mkdir tmp
-cd tmp
-deep-sculpt-run
+export DV_DATA_DIR=/content/drive/MyDrive/deepVogue/data
+export DV_DATASET_DIR=/content/drive/MyDrive/deepVogue/datasets
+export DV_RUN_DIR=/content/runs                 # local fast disk
+export DV_DRIVE_SYNC=/content/drive/MyDrive/deepVogue/runs
+export DV_ANCHORS_DIR=/content/drive/MyDrive/deepVogue/anchors
+export DV_WALKS_DIR=/content/drive/MyDrive/deepVogue/walks
+export DV_DATASET_NAME=tarot
+
+# 1. pull NVIDIA SG3-t pretrained checkpoints (for fine-tune runs)
+make download-pretrained
+
+# 2. prep tarot images with procedural augmentation
+make prepare-stills DV_RES=512 DV_AUGMENT=1 DV_MAX_AUG=8000
+
+# 3. train SG3-t (auto-resumes if interrupted)
+make train DV_CFG=stylegan3-t DV_KIMG=5000 DV_BATCH=32 DV_GAMMA=8.2
+# Colab dies mid-run? Just:
+make resume
+
+# 4. serve + chat
+make colab-serve DV_TG_TOKEN=<botfather-token> DV_TG_ALLOWLIST=<your-tg-uid>
 ```
 
-# Install
-
-Go to `https://github.com/{group}/deep-sculpt` to see the project, manage issues,
-setup you ssh public key, ...
-
-Create a python3 virtualenv and activate it:
+## Latent cinema for a film
 
 ```bash
-sudo apt-get install virtualenv python-pip python-dev
-deactivate; virtualenv -ppython3 ~/venv ; source ~/venv/bin/activate
+export DV_DATASET_NAME=film
+make prepare-frames DV_RES=512 DV_FPS=1
+make train DV_CFG=stylegan3-t DV_NETWORK_PKL=$(cat /path/to/pretrained/stylegan3-t-ffhqu-256x256.pkl)
+make film FILM_ID=opening_scene DV_PROJ_STRIDE=4 DV_PROJ_STEPS=500
 ```
 
-Clone the project and install it:
-
-```bash
-git clone git@github.com:{group}/deep-sculpt.git
-cd deep-sculpt
-pip install -r requirements.txt
-make clean install test                # install and test
-```
-Functionnal test with a script:
+## Tests
 
 ```bash
-cd
-mkdir tmp
-cd tmp
-deep-sculpt-run
+make test
 ```
+
+## License
+
+StyleGAN3 and StyleGAN2-ADA code under NVIDIA's source-code license; everything
+else MIT.

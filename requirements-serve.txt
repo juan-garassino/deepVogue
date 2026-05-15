@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pyngrok>=7.0
+python-multipart
+imageio[ffmpeg]
+pyyaml>=6
+pydantic>=2.5
