@@ -5,8 +5,8 @@ import click
 from typing import List, Optional
 import torch
 import pickle
-import neuronal_network_utils
-import legacy
+from deepVogue import neuronal_network_utils
+from deepVogue import legacy
 
 
 def extract_conv_names(model, model_res):
@@ -15,26 +15,45 @@ def extract_conv_names(model, model_res):
     return model_names
 
 
+def _is_low_res_layer(name, low_res_set, backbone):
+    if backbone == "sg2":
+        return any(f"synthesis.b{res}" in name for res in low_res_set)
+    # SG3: synthesis.L<idx>_<bandwidth>_<ch>.* — bandwidth ≈ layer resolution.
+    if name.startswith("synthesis.L") and "_" in name:
+        try:
+            tag = name.split(".")[1]
+            bw = int(tag.split("_")[1])
+            return bw <= max(low_res_set)
+        except (IndexError, ValueError):
+            return False
+    return False
+
+
+def _detect_backbone(model):
+    for n, _ in model.named_parameters():
+        if n.startswith("synthesis.b"):
+            return "sg2"
+        if n.startswith("synthesis.L"):
+            return "sg3"
+    return "sg2"
+
+
 def blend_models(low, high, model_res, resolution):
 
-    resolutions = [4 * 2**x for x in range(int(np.log2(resolution) - 1))]
-    # print(resolutions)
+    resolutions = set(4 * 2**x for x in range(int(np.log2(resolution) - 1)))
+    backbone = _detect_backbone(low)
 
     low_names = extract_conv_names(low, model_res)
     high_names = extract_conv_names(high, model_res)
 
     assert all((x == y for x, y in zip(low_names, high_names)))
 
-    # start with lower model and add weights above
     model_out = copy.deepcopy(low)
     params_src = high.named_parameters()
     dict_dest = model_out.state_dict()
 
     for name, param in params_src:
-        if not any(f"synthesis.b{res}" in name for res in resolutions) and not (
-            "mapping" in name
-        ):
-            # print(name)
+        if not _is_low_res_layer(name, resolutions, backbone) and "mapping" not in name:
             dict_dest[name].data.copy_(param.data)
 
     model_out_dict = model_out.state_dict()
