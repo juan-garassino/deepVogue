@@ -67,12 +67,18 @@ make download-pretrained
 # 2. prep tarot images with procedural augmentation
 make prepare-stills DV_RES=512 DV_AUGMENT=1 DV_MAX_AUG=8000
 
-# 3. train SG3-t (auto-resumes if interrupted)
-make train DV_CFG=stylegan3-t DV_KIMG=5000 DV_BATCH=32 DV_GAMMA=8.2
+# 2b. (optional) eyeball the augmenter before kicking 24h of training
+make preview-augment
+
+# 3. train SG3-t (auto-resumes if interrupted; gamma rule: 0.0002 * res^2 / batch)
+make train DV_CFG=stylegan3-t DV_KIMG=5000 DV_BATCH=32 DV_GAMMA=2
 # Colab dies mid-run? Just:
 make resume
 
-# 4. serve + chat
+# 4. register the trained checkpoint so the bot can find it
+make register MODEL_ID=tarot_v1
+
+# 5. serve + chat
 make colab-serve DV_TG_TOKEN=<botfather-token> DV_TG_ALLOWLIST=<your-tg-uid>
 ```
 
@@ -81,7 +87,8 @@ make colab-serve DV_TG_TOKEN=<botfather-token> DV_TG_ALLOWLIST=<your-tg-uid>
 ```bash
 export DV_DATASET_NAME=film
 make prepare-frames DV_RES=512 DV_FPS=1
-make train DV_CFG=stylegan3-t DV_NETWORK_PKL=$(cat /path/to/pretrained/stylegan3-t-ffhqu-256x256.pkl)
+make train DV_CFG=stylegan3-t DV_GAMMA=2 DV_NETWORK_PKL=/path/to/pretrained/stylegan3-t-ffhqu-256x256.pkl
+make register MODEL_ID=film_pretrained KIND=frames
 make film FILM_ID=opening_scene DV_PROJ_STRIDE=4 DV_PROJ_STEPS=500
 ```
 

@@ -60,7 +60,9 @@ When extending the project, prefer additions that make the latent space *navigab
   anchors_dir: anchors/tarot              # optional, for /film
 ```
 
-Endpoints: `GET /health`, `GET /models`, `POST /generate {model,seed,trunc,factor_idx?,factor_amp?}`, `POST /walk {model,seeds[],steps,fps,mode,trunc?}`, `GET /films/{model_id}/{walk_id}`. Bot commands: `/start /models /gen /walk /film /factor`.
+Endpoints: `GET /health`, `GET /models`, `GET /status?model=<id>`, `POST /generate {model,seed,trunc,factor_idx?,factor_amp?}`, `POST /walk {model,seeds[],steps,fps,mode,trunc?}`, `GET /films/{model_id}/{walk_id}`. Bot commands: `/start /models /gen /walk /film /factor /status`.
+
+**Films endpoint contract.** `GET /films/{model_id}/{walk_id}` resolves to `<entry.walks_dir>/<walk_id>.mp4` if the registry entry overrides `walks_dir`, else to `<unscoped $DV_WALKS_DIR>/<model_id>/<walk_id>.mp4`. The lookup is **independent of `DV_DATASET_NAME`** so the bot can serve films from any registered dataset regardless of which dataset FastAPI was launched against.
 
 The canonical entry point is `notebooks/deepVogue_colab.ipynb` (cells 00–07: setup → configure → prepare → train → project anchors → walk → factors → eval). Every step in the notebook is a `make` target — the notebook just sets `DV_*` env vars and calls `!make <target>`. The same commands run locally.
 
@@ -85,11 +87,14 @@ make prepare-stills DV_RES=512                # tarot / fashion folder
 make prepare-frames DV_RES=512 DV_FPS=1       # movies → dataset.zip + frames_index.json
 
 # training (Drive-aware; reads DV_RUN_DIR / DV_DRIVE_SYNC / optional DV_NETWORK_PKL)
-make train DV_DATASET_NAME=tarot DV_CFG=stylegan3-t DV_KIMG=5000 DV_BATCH=32 DV_GAMMA=8.2
+# Gamma rule of thumb: ≈ 0.0002 * res^2 / batch  (256→0.5, 512→2, 1024→6.6)
+make train DV_DATASET_NAME=tarot DV_CFG=stylegan3-t DV_KIMG=5000 DV_BATCH=32 DV_GAMMA=2
 make resume DV_DATASET_NAME=tarot             # resumes from latest Drive snapshot
 make latest-pkl DV_DATASET_NAME=tarot         # prints latest network-snapshot-*.pkl path
 make models-list                              # prints models.yaml registry
+make register MODEL_ID=tarot_v1               # appends latest snapshot to models.yaml
 make download-pretrained                      # NVIDIA SG3-t pretrained pkls → DV_PRETRAINED_DIR
+make preview-augment DV_DATASET_NAME=tarot    # dump 20 augmented samples for visual sanity
 make sync-out                                 # one-shot mirror of DV_RUN_DIR → DV_DRIVE_SYNC
 
 # latent cinema

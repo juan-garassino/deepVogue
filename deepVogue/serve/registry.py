@@ -67,3 +67,24 @@ class Registry:
             if model_id not in self._models:
                 raise KeyError(model_id)
             return self._models[model_id]
+
+    # ---------------------------------------------------------------- write
+    def append_entry(self, entry: ModelEntry) -> None:
+        """Insert or update ``entry`` in ``models.yaml``.
+
+        Atomic-ish: load → upsert → safe_dump back. Same-id entries are replaced.
+        """
+        try:
+            import yaml
+        except ImportError as e:
+            raise RuntimeError("PyYAML required: pip install pyyaml") from e
+        self._load_if_stale()
+        with self._lock:
+            current = dict(self._models)
+        current[entry.id] = entry
+        items = [m.model_dump(exclude_none=True) for m in current.values()]
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(yaml.safe_dump(items, sort_keys=False, indent=2))
+        # force next read to pick up the new mtime
+        with self._lock:
+            self._mtime = -1

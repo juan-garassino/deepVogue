@@ -67,7 +67,8 @@ async def cmd_start(update, ctx):
         "/gen <model> seed=N trunc=0.7\n"
         "/walk <model> seeds=A,B steps=24 fps=24 mode=cubic\n"
         "/film <model> <walk_id>\n"
-        "/factor <model> seed=N idx=K deg=0.4"
+        "/factor <model> seed=N idx=K deg=0.4\n"
+        "/status <model>  — last FID rows + kimg"
     )
 
 
@@ -151,6 +152,35 @@ async def cmd_film(update, ctx):
     await update.message.reply_video(video=r.content)
 
 
+async def cmd_status(update, ctx):
+    if not await _is_allowed(update):
+        return
+    pos, kv = _parse_kv(ctx.args)
+    if not pos:
+        return await update.message.reply_text("usage: /status <model> [last_n=5]")
+    last_n = int(kv.get("last_n", 5))
+    import httpx
+    async with httpx.AsyncClient(timeout=30) as cli:
+        r = await cli.get(f"{_api_url()}/status", params={"model": pos[0], "last_n": last_n})
+    if r.status_code != 200:
+        return await update.message.reply_text(f"server: HTTP {r.status_code} {r.text[:200]}")
+    data = r.json()
+    lines = [f"model: {data['model']}"]
+    if data.get("latest_snapshot"):
+        lines.append(f"latest: {data['latest_snapshot'].rsplit('/', 1)[-1]}")
+    if data.get("fid_rows"):
+        for row in data["fid_rows"]:
+            try:
+                fid = row["results"]["fid50k_full"]
+                snap = row.get("snapshot_pkl", "?")
+                lines.append(f"  {snap}: fid={fid:.3f}")
+            except (KeyError, TypeError):
+                continue
+    else:
+        lines.append("(no FID rows yet)")
+    await update.message.reply_text("\n".join(lines))
+
+
 async def cmd_factor(update, ctx):
     if not await _is_allowed(update):
         return
@@ -193,6 +223,7 @@ def main() -> None:
     app.add_handler(CommandHandler("walk", cmd_walk))
     app.add_handler(CommandHandler("film", cmd_film))
     app.add_handler(CommandHandler("factor", cmd_factor))
+    app.add_handler(CommandHandler("status", cmd_status))
     print(f"[bot] long-polling; api={_api_url()} allowlist={_allowlist() or 'OPEN'}")
     app.run_polling(close_loop=False)
 

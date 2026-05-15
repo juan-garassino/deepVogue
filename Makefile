@@ -26,7 +26,8 @@ DV_FACTOR_AMP  ?= 0.4
 DV_BLEND_RES   ?= 32
 DV_CFG         ?= stylegan3-t
 DV_BATCH       ?= 32
-DV_GAMMA       ?= 8.2
+# R1 weight; rule of thumb ≈ 0.0002 * res^2 / batch  (256→0.5, 512→2, 1024→6.6)
+DV_GAMMA       ?= 2.0
 DV_AUG         ?= ada
 DV_MIRROR      ?= 1
 DV_AUGMENT     ?= 0            # set to 1 for procedural augmentation on stills
@@ -84,6 +85,23 @@ prepare-stills:
 	    --resolution $(DV_RES) \
 	    $$( [ "$(DV_AUGMENT)" = "1" ] && echo "--augment-procedural --max-augmented $(DV_MAX_AUG)" )
 
+# Dump 20 augmented sample images for visual inspection before kicking training.
+DV_PREVIEW_N ?= 20
+preview-augment:
+	@$(PY) -c "import random, os, sys; from pathlib import Path; \
+	from PIL import Image, ImageOps; \
+	from deepVogue._paths import resolve; \
+	from deepVogue.dataset_tool.tarot_augment import augment_once; \
+	p = resolve(); \
+	out = p.walks_dir / '_aug_preview'; out.mkdir(parents=True, exist_ok=True); \
+	exts = {'.png','.jpg','.jpeg','.bmp','.webp'}; \
+	srcs = sorted(s for s in p.data_dir.rglob('*') if s.suffix.lower() in exts); \
+	(sys.exit(f'no source images under {p.data_dir}') if not srcs else None); \
+	random.seed(0); \
+	[ ImageOps.fit(Image.open(random.choice(srcs)).convert('RGB'), ($(DV_RES),$(DV_RES)), Image.BICUBIC).save(out/f'orig_{i:02d}.png') for i in range(min(4,len(srcs))) ]; \
+	[ augment_once(ImageOps.fit(Image.open(random.choice(srcs)).convert('RGB'), ($(DV_RES),$(DV_RES)), Image.BICUBIC)).save(out/f'aug_{i:02d}.png') for i in range($(DV_PREVIEW_N)) ]; \
+	print(f'✓ wrote {$(DV_PREVIEW_N)} augmented samples to {out}')"
+
 prepare-frames:
 	$(PY) -m deepVogue.dataset_tool.prepare frames \
 	    --resolution $(DV_RES) --fps $(DV_FPS)
@@ -106,12 +124,25 @@ train:
 download-pretrained:
 	@dst=$${DV_PRETRAINED_DIR:-$$DV_DRIVE_SYNC/../pretrained}; mkdir -p "$$dst"; \
 	 base=https://api.ngc.nvidia.com/v2/models/nvidia/research/stylegan3/versions/1/files; \
+	 fail=0; \
 	 for f in stylegan3-t-ffhqu-256x256.pkl stylegan3-t-metfaces-1024x1024.pkl; do \
-	   if [ -f "$$dst/$$f" ]; then echo "skip $$f"; else \
-	   echo "fetching $$f"; \
-	   curl -L -o "$$dst/$$f" "$$base/$$f" || echo "(failed $$f — pull manually from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/research/models/stylegan3)"; fi; \
-	 done; \
-	 ls -lh "$$dst"
+	   if [ -f "$$dst/$$f" ] && [ $$(wc -c < "$$dst/$$f") -gt 100000000 ]; then \
+	     echo "skip $$f (already present, $$(du -h "$$dst/$$f" | cut -f1))" ; \
+	   else \
+	     rm -f "$$dst/$$f" ; \
+	     echo "fetching $$f …"; \
+	     if curl -fL --progress-bar -o "$$dst/$$f" "$$base/$$f" ; then \
+	       echo "✓ $$f ($$(du -h "$$dst/$$f" | cut -f1))" ; \
+	     else \
+	       fail=1 ; rm -f "$$dst/$$f" ; \
+	       echo "✗ $$f failed — try manually:" ; \
+	       echo "    wget -O $$dst/$$f $$base/$$f" ; \
+	       echo "  or download from https://catalog.ngc.nvidia.com/orgs/nvidia/teams/research/models/stylegan3 and mv to $$dst/" ; \
+	     fi ; \
+	   fi ; \
+	 done ; \
+	 echo "--- $$dst ---" ; ls -lh "$$dst" ; \
+	 exit $$fail
 
 sync-out:
 	$(PY) -c "from deepVogue._drive_sync import DriveSync; from deepVogue._paths import resolve; p=resolve(); DriveSync(p.run_dir, p.drive_sync, 1)._mirror_once()"
@@ -230,6 +261,17 @@ install-serve:
 serve:
 	@$(PY) -m uvicorn deepVogue.serve.api:app --host $(DV_FASTAPI_HOST) --port $(DV_FASTAPI_PORT)
 
+# Register the latest snapshot for $DV_DATASET_NAME in models.yaml.
+#   make register MODEL_ID=tarot_v1
+#   make register MODEL_ID=film_pretrained KIND=frames
+register:
+	@test -n "$(MODEL_ID)" || (echo "set MODEL_ID=<id>" && exit 1)
+	@$(PY) -m deepVogue.serve.register --id "$(MODEL_ID)" \
+	    --kind $${KIND:-stills} \
+	    $${PKL:+--pkl $$PKL} \
+	    $${ANCHORS_DIR:+--anchors-dir $$ANCHORS_DIR} \
+	    $${FACTORS:+--factors $$FACTORS}
+
 # Run the Telegram bot (long-polling). Needs DV_TG_TOKEN, optional DV_TG_ALLOWLIST.
 bot:
 	@$(PY) -m deepVogue.bot.telegram
@@ -256,7 +298,7 @@ count_lines:
 .PHONY: install_requirements install_train_requirements colab-install colab-clone \
         check_code black test clean \
         prepare-stills prepare-frames train resume sync-out latest-pkl models-list \
-        download-pretrained install-serve serve bot colab-serve film \
+        download-pretrained install-serve serve register bot colab-serve film preview-augment \
         project-frames walk walk-frames walk-stills \
         factors-discover walk-factor blend eval \
         pipeline-stills pipeline-frames env count_lines

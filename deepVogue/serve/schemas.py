@@ -15,6 +15,7 @@ class ModelEntry(BaseModel):
     default_trunc: float = 0.7
     factors: Optional[str] = None
     anchors_dir: Optional[str] = None
+    walks_dir: Optional[str] = None     # override; default: <unscoped DV_WALKS_DIR>/<id>
 
 
 class GenerateRequest(BaseModel):
