@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -14,29 +14,22 @@ code."""
 import re
 import numpy as np
 import torch
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils as dnnlib
 
 from . import misc
 
-# ----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
 
-_num_moments = 3  # [num_scalars, sum_of_scalars, sum_of_squares]
-_reduce_dtype = torch.float32  # Data type to use for initial per-tensor reduction.
-_counter_dtype = torch.float64  # Data type to use for the internal counters.
-_rank = 0  # Rank of the current process.
-_sync_device = (
-    None  # Device to use for multiprocess communication. None = single-process.
-)
-_sync_called = False  # Has _sync() been called yet?
-_counters = (
-    dict()
-)  # Running counters on each device, updated by report(): name => device => torch.Tensor
-_cumulative = (
-    dict()
-)  # Cumulative counters on the CPU, updated by _sync(): name => torch.Tensor
+_num_moments    = 3             # [num_scalars, sum_of_scalars, sum_of_squares]
+_reduce_dtype   = torch.float32 # Data type to use for initial per-tensor reduction.
+_counter_dtype  = torch.float64 # Data type to use for the internal counters.
+_rank           = 0             # Rank of the current process.
+_sync_device    = None          # Device to use for multiprocess communication. None = single-process.
+_sync_called    = False         # Has _sync() been called yet?
+_counters       = dict()        # Running counters on each device, updated by report(): name => device => torch.Tensor
+_cumulative     = dict()        # Cumulative counters on the CPU, updated by _sync(): name => torch.Tensor
 
-# ----------------------------------------------------------------------------
-
+#----------------------------------------------------------------------------
 
 def init_multiprocessing(rank, sync_device):
     r"""Initializes `torch_utils.training_stats` for collecting statistics
@@ -57,9 +50,7 @@ def init_multiprocessing(rank, sync_device):
     _rank = rank
     _sync_device = sync_device
 
-
-# ----------------------------------------------------------------------------
-
+#----------------------------------------------------------------------------
 
 @misc.profiled_function
 def report(name, value):
@@ -93,13 +84,11 @@ def report(name, value):
         return value
 
     elems = elems.detach().flatten().to(_reduce_dtype)
-    moments = torch.stack(
-        [
-            torch.ones_like(elems).sum(),
-            elems.sum(),
-            elems.square().sum(),
-        ]
-    )
+    moments = torch.stack([
+        torch.ones_like(elems).sum(),
+        elems.sum(),
+        elems.square().sum(),
+    ])
     assert moments.ndim == 1 and moments.shape[0] == _num_moments
     moments = moments.to(_counter_dtype)
 
@@ -109,9 +98,7 @@ def report(name, value):
     _counters[name][device].add_(moments)
     return value
 
-
-# ----------------------------------------------------------------------------
-
+#----------------------------------------------------------------------------
 
 def report0(name, value):
     r"""Broadcasts the given set of scalars by the first process (`rank = 0`),
@@ -121,9 +108,7 @@ def report0(name, value):
     report(name, value if _rank == 0 else [])
     return value
 
-
-# ----------------------------------------------------------------------------
-
+#----------------------------------------------------------------------------
 
 class Collector:
     r"""Collects the scalars broadcasted by `report()` and `report0()` and
@@ -145,8 +130,7 @@ class Collector:
                         scalars were collected on a given round
                         (default: True).
     """
-
-    def __init__(self, regex=".*", keep_previous=True):
+    def __init__(self, regex='.*', keep_previous=True):
         self._regex = re.compile(regex)
         self._keep_previous = keep_previous
         self._cumulative = dict()
@@ -177,9 +161,7 @@ class Collector:
             self._moments.clear()
         for name, cumulative in _sync(self.names()):
             if name not in self._cumulative:
-                self._cumulative[name] = torch.zeros(
-                    [_num_moments], dtype=_counter_dtype
-                )
+                self._cumulative[name] = torch.zeros([_num_moments], dtype=_counter_dtype)
             delta = cumulative - self._cumulative[name]
             self._cumulative[name].copy_(cumulative)
             if float(delta[0]) != 0:
@@ -210,7 +192,7 @@ class Collector:
         """
         delta = self._get_delta(name)
         if int(delta[0]) == 0:
-            return float("nan")
+            return float('nan')
         return float(delta[1] / delta[0])
 
     def std(self, name):
@@ -220,7 +202,7 @@ class Collector:
         """
         delta = self._get_delta(name)
         if int(delta[0]) == 0 or not np.isfinite(float(delta[1])):
-            return float("nan")
+            return float('nan')
         if int(delta[0]) == 1:
             return float(0)
         mean = float(delta[1] / delta[0])
@@ -229,18 +211,16 @@ class Collector:
 
     def as_dict(self):
         r"""Returns the averages accumulated between the last two calls to
-        `update()` as an `deep_neuronal_net_utils.EasyDict`. The contents are as follows:
+        `update()` as an `dnnlib.EasyDict`. The contents are as follows:
 
-            deep_neuronal_net_utils.EasyDict(
-                NAME = deep_neuronal_net_utils.EasyDict(num=FLOAT, mean=FLOAT, std=FLOAT),
+            dnnlib.EasyDict(
+                NAME = dnnlib.EasyDict(num=FLOAT, mean=FLOAT, std=FLOAT),
                 ...
             )
         """
-        stats = neuronal_network_utils.EasyDict()
+        stats = dnnlib.EasyDict()
         for name in self.names():
-            stats[name] = neuronal_network_utils.EasyDict(
-                num=self.num(name), mean=self.mean(name), std=self.std(name)
-            )
+            stats[name] = dnnlib.EasyDict(num=self.num(name), mean=self.mean(name), std=self.std(name))
         return stats
 
     def __getitem__(self, name):
@@ -249,9 +229,7 @@ class Collector:
         """
         return self.mean(name)
 
-
-# ----------------------------------------------------------------------------
-
+#----------------------------------------------------------------------------
 
 def _sync(names):
     r"""Synchronize the global cumulative counters across devices and
@@ -264,7 +242,7 @@ def _sync(names):
 
     # Collect deltas within current rank.
     deltas = []
-    device = _sync_device if _sync_device is not None else torch.device("cpu")
+    device = _sync_device if _sync_device is not None else torch.device('cpu')
     for name in names:
         delta = torch.zeros([_num_moments], dtype=_counter_dtype, device=device)
         for counter in _counters[name].values():
@@ -287,5 +265,4 @@ def _sync(names):
     # Return name-value pairs.
     return [(name, _cumulative[name]) for name in names]
 
-
-# ----------------------------------------------------------------------------
+#----------------------------------------------------------------------------

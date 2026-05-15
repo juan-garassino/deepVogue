@@ -1,0 +1,12 @@
+# deepVogue — training dependencies (Colab GPU runtime).
+# Install on top of requirements.txt:  pip install -r requirements-train.txt
+
+torch>=1.9,<2.2
+torchvision
+pyspng==0.1.0
+pandas
+scikit-learn
+librosa            # audio-reactive walks
+ninja>=1.10        # StyleGAN3 CUDA op JIT build
+scipy>=1.7         # SG3 signal/optimize used in networks_stylegan3.py
+pillow>=9
