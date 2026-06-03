@@ -1,4 +1,5 @@
 """Slack webhook notifier. Silent no-op if SLACK_WEBHOOK_URL unset."""
+
 from __future__ import annotations
 
 import logging
@@ -31,10 +32,19 @@ def _fields(meta: Mapping[str, str] | None) -> list:
     ]
 
 
-def notify_event(channel_tag: str, level: str, headline: str, meta: Mapping[str, str] | None = None) -> None:
-    emoji = {"success": ":white_check_mark:", "failure": ":x:", "info": ":information_source:"}.get(level, ":bell:")
+def notify_event(
+    channel_tag: str, level: str, headline: str, meta: Mapping[str, str] | None = None
+) -> None:
+    emoji = {
+        "success": ":white_check_mark:",
+        "failure": ":x:",
+        "info": ":information_source:",
+    }.get(level, ":bell:")
     blocks = [
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"{emoji} *[{channel_tag}]* {headline}"}}
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"{emoji} *[{channel_tag}]* {headline}"},
+        }
     ]
     fields = _fields(meta)
     if fields:
@@ -42,13 +52,25 @@ def notify_event(channel_tag: str, level: str, headline: str, meta: Mapping[str,
     _post(blocks)
 
 
-def notify_success(channel_tag: str, headline: str, meta: Mapping[str, str] | None = None) -> None:
+def notify_success(
+    channel_tag: str, headline: str, meta: Mapping[str, str] | None = None
+) -> None:
     notify_event(channel_tag, "success", headline, meta)
 
 
-def notify_failure(channel_tag: str, headline: str, meta: Mapping[str, str] | None = None, exc: BaseException | None = None) -> None:
+def notify_failure(
+    channel_tag: str,
+    headline: str,
+    meta: Mapping[str, str] | None = None,
+    exc: BaseException | None = None,
+) -> None:
     meta = dict(meta or {})
     if exc is not None:
         meta.setdefault("error", f"{type(exc).__name__}: {exc}")
-        meta.setdefault("trace", "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[-500:])
+        meta.setdefault(
+            "trace",
+            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[
+                -500:
+            ],
+        )
     notify_event(channel_tag, "failure", headline, meta)

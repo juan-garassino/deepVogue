@@ -1,4 +1,5 @@
 """fsspec filesystem factory and URI resolution for deepVogue artifacts."""
+
 from __future__ import annotations
 
 import os
@@ -12,7 +13,9 @@ _SUPPORTED = {"s3", "gcs", "memory", "file"}
 def get_artifact_fs() -> Any:
     backend = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
     if backend not in _SUPPORTED:
-        raise ValueError(f"unknown DV_ARTIFACT_BACKEND={backend!r}; expected one of {_SUPPORTED}")
+        raise ValueError(
+            f"unknown DV_ARTIFACT_BACKEND={backend!r}; expected one of {_SUPPORTED}"
+        )
     if backend == "s3":
         endpoint = os.environ.get("DV_S3_ENDPOINT_URL")
         client_kwargs = {"endpoint_url": endpoint} if endpoint else {}

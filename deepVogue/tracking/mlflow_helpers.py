@@ -1,4 +1,5 @@
 """MLflow logging helpers for deepVogue training runs."""
+
 from __future__ import annotations
 
 import json
@@ -51,10 +52,16 @@ def log_training_run(
     run_dir = Path(run_dir)
     mlflow.set_experiment(dataset_name)
     with mlflow.start_run() as run:
-        mlflow.log_params({
-            "cfg": cfg, "kimg": kimg, "gamma": gamma, "batch": batch, "res": res,
-            "run_dir": str(run_dir),
-        })
+        mlflow.log_params(
+            {
+                "cfg": cfg,
+                "kimg": kimg,
+                "gamma": gamma,
+                "batch": batch,
+                "res": res,
+                "run_dir": str(run_dir),
+            }
+        )
         if extra_tags:
             mlflow.set_tags(extra_tags)
         fid_rows = _read_fid_jsonl(run_dir)

@@ -17,9 +17,9 @@ def test_gcs_backend(monkeypatch):
     monkeypatch.setenv("DV_ARTIFACT_BACKEND", "gcs")
     monkeypatch.delenv("DV_S3_ENDPOINT_URL", raising=False)
     fs = get_artifact_fs()
-    assert "gcs" in (fs.protocol if isinstance(fs.protocol, tuple) else (fs.protocol,)) or "gs" in (
+    assert "gcs" in (
         fs.protocol if isinstance(fs.protocol, tuple) else (fs.protocol,)
-    )
+    ) or "gs" in (fs.protocol if isinstance(fs.protocol, tuple) else (fs.protocol,))
 
 
 def test_memory_backend_for_tests(monkeypatch):
