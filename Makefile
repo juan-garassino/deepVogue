@@ -302,3 +302,22 @@ count_lines:
         project-frames walk walk-frames walk-stills \
         factors-discover walk-factor blend eval \
         pipeline-stills pipeline-frames env count_lines
+
+# === MLOps stack — local nano ===
+.PHONY: nano-up nano-down nano-logs
+
+NANO_COMPOSE := docker compose -f infra/docker-compose.yml --env-file infra/.env
+
+nano-up: ## Bring up local MLOps stack (postgres + minio + mlflow + prefect + fastapi)
+	@test -f infra/.env || (echo "create infra/.env first: cp infra/.env.example infra/.env" && exit 1)
+	$(NANO_COMPOSE) up -d --build
+	@echo "MLflow:   http://localhost:5000"
+	@echo "Prefect:  http://localhost:4200"
+	@echo "FastAPI:  http://localhost:8080"
+	@echo "MinIO:    http://localhost:9001"
+
+nano-down:
+	$(NANO_COMPOSE) down -v
+
+nano-logs:
+	$(NANO_COMPOSE) logs -f --tail=200
