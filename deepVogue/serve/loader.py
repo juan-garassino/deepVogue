@@ -7,6 +7,7 @@ import threading
 from collections import OrderedDict
 from typing import List, Optional
 
+import fsspec
 import numpy as np
 
 from .registry import ModelEntry
@@ -41,36 +42,52 @@ _CACHE = _Cache(capacity=2)
 # .pkl → G_ema
 # ---------------------------------------------------------------------------
 
-def _load_pkl(pkl_path: str):
-    """Load a StyleGAN .pkl and return G_ema on the right device, eval mode."""
+
+def _load_pkl(pkl_uri: str):
+    """Load a StyleGAN .pkl from any fsspec-supported URI; return G_ema on device, eval mode."""
     import torch
-    from deepVogue import legacy, neuronal_network_utils
+    from deepVogue import legacy
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    with neuronal_network_utils.util.open_url(pkl_path) as f:
+    with fsspec.open(pkl_uri, "rb") as f:
         G = legacy.load_network_pkl(f)["G_ema"].requires_grad_(False).to(device).eval()
     return G
 
 
 def load(entry: ModelEntry):
-    return _CACHE.get_or_load(entry.id, lambda: _load_pkl(entry.pkl))
+    uri = entry.pkl_resolved or entry.pkl
+    return _CACHE.get_or_load(entry.id, lambda: _load_pkl(uri))
 
 
 # ---------------------------------------------------------------------------
 # forward wrappers
 # ---------------------------------------------------------------------------
 
+
 def _seed_to_w(G, seed: int, trunc: float, device):
     import torch
-    z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device).float()
+
+    z = (
+        torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim))
+        .to(device)
+        .float()
+    )
     w = G.mapping(z, None, truncation_psi=trunc)
     return w
 
 
-def generate(entry: ModelEntry, *, seed: int, trunc: Optional[float] = None,
-             factor_idx: Optional[int] = None, factor_amp: float = 0.0) -> bytes:
+def generate(
+    entry: ModelEntry,
+    *,
+    seed: int,
+    trunc: Optional[float] = None,
+    factor_idx: Optional[int] = None,
+    factor_amp: float = 0.0,
+) -> bytes:
     """Return PNG bytes for a single generated image."""
     import torch
     from PIL import Image
+
     G = load(entry)
     device = next(G.parameters()).device
     psi = entry.default_trunc if trunc is None else trunc
@@ -89,12 +106,20 @@ def generate(entry: ModelEntry, *, seed: int, trunc: Optional[float] = None,
     return buf.getvalue()
 
 
-def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
-         mode: str = "cubic", trunc: Optional[float] = None) -> bytes:
+def walk(
+    entry: ModelEntry,
+    *,
+    seeds: List[int],
+    steps: int,
+    fps: int,
+    mode: str = "cubic",
+    trunc: Optional[float] = None,
+) -> bytes:
     """Return mp4 bytes for a latent walk between seeds."""
     import torch
     import imageio.v2 as imageio
     from deepVogue.walk import _interpolate_anchors
+
     if len(seeds) < 2:
         raise ValueError("walk needs ≥2 seeds")
     G = load(entry)
@@ -102,7 +127,7 @@ def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
     psi = entry.default_trunc if trunc is None else trunc
     with torch.no_grad():
         ws = [
-            _seed_to_w(G, s, psi, device).cpu().numpy()[0]   # (num_ws, w_dim)
+            _seed_to_w(G, s, psi, device).cpu().numpy()[0]  # (num_ws, w_dim)
             for s in seeds
         ]
     anchors = np.stack(ws, axis=0)
@@ -110,23 +135,33 @@ def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
     T = traj.shape[0]
 
     import tempfile, os as _os
+
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tf:
         tmp_path = tf.name
     try:
-        writer = imageio.get_writer(tmp_path, fps=fps, codec="libx264",
-                                    bitrate="16M", macro_block_size=1)
+        writer = imageio.get_writer(
+            tmp_path, fps=fps, codec="libx264", bitrate="16M", macro_block_size=1
+        )
         try:
             with torch.no_grad():
                 for t in range(T):
-                    w = torch.from_numpy(traj[t:t + 1]).to(device).float()
+                    w = torch.from_numpy(traj[t : t + 1]).to(device).float()
                     img = G.synthesis(w, noise_mode="const")
                     img = (img + 1) * (255 / 2)
-                    img = img.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
+                    img = (
+                        img.permute(0, 2, 3, 1)
+                        .clamp(0, 255)
+                        .to(torch.uint8)[0]
+                        .cpu()
+                        .numpy()
+                    )
                     writer.append_data(img)
         finally:
             writer.close()
         with open(tmp_path, "rb") as f:
             return f.read()
     finally:
-        try: _os.unlink(tmp_path)
-        except OSError: pass
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass

@@ -15,8 +15,9 @@ def _default_yaml_path() -> Path:
     if os.environ.get("DV_MODELS_YAML"):
         return Path(os.environ["DV_MODELS_YAML"])
     from deepVogue._paths import resolve
+
     p = resolve()
-    base = (p.drive_sync.parent if p.drive_sync else p.run_dir.parent)
+    base = p.drive_sync.parent if p.drive_sync else p.run_dir.parent
     return Path(base) / "models.yaml"
 
 
@@ -46,7 +47,9 @@ class Registry:
         if isinstance(raw, dict) and "models" in raw:
             raw = raw["models"]
         if not isinstance(raw, list):
-            raise RuntimeError(f"{self.path}: expected list (or {{models: [...]}}) at top level")
+            raise RuntimeError(
+                f"{self.path}: expected list (or {{models: [...]}}) at top level"
+            )
         models = {}
         for item in raw:
             entry = ModelEntry(**item)
