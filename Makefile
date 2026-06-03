@@ -304,7 +304,7 @@ count_lines:
         pipeline-stills pipeline-frames env count_lines
 
 # === MLOps stack — local nano ===
-.PHONY: nano-up nano-down nano-logs
+.PHONY: nano-up nano-down nano-logs nano-smoke
 
 NANO_COMPOSE := docker compose -f infra/docker-compose.yml --env-file infra/.env
 
@@ -321,3 +321,6 @@ nano-down:
 
 nano-logs:
 	$(NANO_COMPOSE) logs -f --tail=200
+
+nano-smoke: ## Run the local-nano integration smoke against a running stack
+	python scripts/run_nano_smoke.py
