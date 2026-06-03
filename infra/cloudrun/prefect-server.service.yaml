@@ -1,0 +1,35 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: deepvogue-prefect-server
+  annotations:
+    run.googleapis.com/launch-stage: GA
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/vpc-access-connector: deepvogue-vpc
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+    spec:
+      serviceAccountName: prefect-server-sa@PROJECT_ID.iam.gserviceaccount.com
+      containerConcurrency: 40
+      timeoutSeconds: 300
+      containers:
+        - image: us-central1-docker.pkg.dev/PROJECT_ID/deepvogue/prefect-server:latest
+          ports:
+            - containerPort: 4200
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          env:
+            - name: PREFECT_SERVER_API_HOST
+              value: 0.0.0.0
+            - name: PREFECT_SERVER_DATABASE_CONNECTION_URL
+              valueFrom:
+                secretKeyRef:
+                  name: deepvogue-prefect-db-uri
+                  key: latest

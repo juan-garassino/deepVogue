@@ -324,3 +324,34 @@ nano-logs:
 
 nano-smoke: ## Run the local-nano integration smoke against a running stack
 	python scripts/run_nano_smoke.py
+
+# === MLOps stack — GCP deploy ===
+.PHONY: deploy-inference deploy-mlflow deploy-prefect gcp-setup publish
+
+GCP_REGION ?= us-central1
+GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
+
+publish: ## Publish latest Drive snapshot for DV_DATASET_NAME to DV_PUBLISH_TARGET as MODEL_ID
+	@test -n "$(MODEL_ID)" || (echo "usage: make publish MODEL_ID=<id> [DV_DATASET_NAME=<name>]" && exit 1)
+	python -m deepVogue.publish --model-id=$(MODEL_ID) \
+	  --src-dir=$${DV_DRIVE_SYNC:?set DV_DRIVE_SYNC}/$${DV_DATASET_NAME:-default}
+
+deploy-inference:
+	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)
+	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/inference.service.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
+
+deploy-mlflow:
+	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/mlflow.service.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
+
+deploy-prefect:
+	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/prefect-server.service.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
+	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/prefect-worker.job.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run jobs replace - --region=$(GCP_REGION)
+
+gcp-setup:
+	bash infra/gcp/setup.sh
+	bash infra/gcp/setup-sql.sh
+	bash infra/gcp/setup-iam.sh
