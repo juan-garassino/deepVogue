@@ -7,6 +7,7 @@ from typing import Any
 
 from prefect import flow, task
 
+from deepVogue.clients import artifact_uri
 from deepVogue.orchestration.backends import get_backend
 from deepVogue.notifications import slack
 
@@ -194,11 +195,7 @@ def pipeline_stills(
         source_uri=source_uri,
         dataset_name=dataset_name,
         res=res,
-        target_uri=(
-            "memory://deepvogue-datasets"
-            if backend == "local"
-            else "gs://deepvogue-datasets"
-        ),
+        target_uri=artifact_uri("deepvogue-datasets"),
         backend=backend,
     )
     train = train_flow(
@@ -208,19 +205,13 @@ def pipeline_stills(
         gamma=gamma,
         batch=batch,
         res=res,
-        target_uri=(
-            "memory://deepvogue-models/" + dataset_name
-            if backend == "local"
-            else f"gs://deepvogue-models/{dataset_name}"
-        ),
+        target_uri=artifact_uri("deepvogue-models", dataset_name),
         backend=backend,
     )
     # publish requires a local directory; nano flow skips actual publish and just records URIs
     walk = walk_flow(
         model_id=model_id,
-        target_uri=(
-            "memory://deepvogue-walks" if backend == "local" else "gs://deepvogue-walks"
-        ),
+        target_uri=artifact_uri("deepvogue-walks"),
         steps=walk_steps,
         fps=walk_fps,
         backend=backend,
@@ -249,11 +240,7 @@ def pipeline_frames(
         res=res,
         kind="frames",
         fps=fps,
-        target_uri=(
-            "memory://deepvogue-datasets"
-            if backend == "local"
-            else "gs://deepvogue-datasets"
-        ),
+        target_uri=artifact_uri("deepvogue-datasets"),
         backend=backend,
     )
     train = train_flow(
@@ -263,29 +250,19 @@ def pipeline_frames(
         gamma=gamma,
         batch=batch,
         res=res,
-        target_uri=(
-            "memory://deepvogue-models/" + dataset_name
-            if backend == "local"
-            else f"gs://deepvogue-models/{dataset_name}"
-        ),
+        target_uri=artifact_uri("deepvogue-models", dataset_name),
         backend=backend,
     )
     project = project_flow(
         model_id=model_id,
         frames_uri=prep["dataset_uri"],
-        target_uri=(
-            "memory://deepvogue-anchors"
-            if backend == "local"
-            else "gs://deepvogue-anchors"
-        ),
+        target_uri=artifact_uri("deepvogue-anchors"),
         backend=backend,
     )
     walk = walk_flow(
         model_id=model_id,
         anchors_uri=project["anchors_uri"],
-        target_uri=(
-            "memory://deepvogue-walks" if backend == "local" else "gs://deepvogue-walks"
-        ),
+        target_uri=artifact_uri("deepvogue-walks"),
         steps=walk_steps,
         fps=walk_fps,
         backend=backend,

@@ -35,3 +35,19 @@ def resolve_uri(uri: str) -> str:
     if not root:
         return uri
     return f"{root}/{uri}"
+
+
+def artifact_uri(bucket: str, *parts: str) -> str:
+    """Build an artifact URI honoring DV_ARTIFACT_BACKEND.
+
+    For backend=s3 / gcs / memory, returns a `<scheme>://bucket/parts...` URI.
+    For backend=file (or unset), returns a relative `bucket/parts...` path
+    suitable for the local filesystem.
+    """
+    backend = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
+    scheme = {"s3": "s3://", "gcs": "gs://", "memory": "memory://", "file": ""}.get(
+        backend, ""
+    )
+    suffix = "/".join(parts) if parts else ""
+    base = f"{scheme}{bucket}" if scheme else bucket
+    return f"{base}/{suffix}".rstrip("/")

@@ -1,6 +1,6 @@
 import os
 import pytest
-from deepVogue.clients import get_artifact_fs, resolve_uri
+from deepVogue.clients import artifact_uri, get_artifact_fs, resolve_uri
 
 
 def test_s3_backend_with_minio_endpoint(monkeypatch):
@@ -42,3 +42,34 @@ def test_resolve_uri_passthrough_absolute():
 def test_resolve_uri_resolves_relative_to_models_root(monkeypatch):
     monkeypatch.setenv("DV_MODELS_ROOT", "/data/runs")
     assert resolve_uri("tarot/snap.pkl") == "/data/runs/tarot/snap.pkl"
+
+
+def test_artifact_uri_s3_backend(monkeypatch):
+    monkeypatch.setenv("DV_ARTIFACT_BACKEND", "s3")
+    assert artifact_uri("deepvogue-datasets") == "s3://deepvogue-datasets"
+    assert (
+        artifact_uri("deepvogue-datasets", "tarot", "v1")
+        == "s3://deepvogue-datasets/tarot/v1"
+    )
+
+
+def test_artifact_uri_gcs_backend(monkeypatch):
+    monkeypatch.setenv("DV_ARTIFACT_BACKEND", "gcs")
+    assert artifact_uri("deepvogue-models") == "gs://deepvogue-models"
+    assert (
+        artifact_uri("deepvogue-models", "tarot_v1") == "gs://deepvogue-models/tarot_v1"
+    )
+
+
+def test_artifact_uri_memory_backend(monkeypatch):
+    monkeypatch.setenv("DV_ARTIFACT_BACKEND", "memory")
+    assert artifact_uri("deepvogue-walks") == "memory://deepvogue-walks"
+    assert (
+        artifact_uri("deepvogue-walks", "abc.mp4") == "memory://deepvogue-walks/abc.mp4"
+    )
+
+
+def test_artifact_uri_file_backend_default(monkeypatch):
+    monkeypatch.delenv("DV_ARTIFACT_BACKEND", raising=False)
+    assert artifact_uri("deepvogue-datasets") == "deepvogue-datasets"
+    assert artifact_uri("deepvogue-datasets", "tarot") == "deepvogue-datasets/tarot"
