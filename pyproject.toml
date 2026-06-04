@@ -1,0 +1,31 @@
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+extend-exclude = '''
+(
+    ^/deepVogue/training/
+  | ^/deepVogue/pytorch_utils/
+  | ^/deepVogue/dataset_tool/
+  | ^/deepVogue/generative_network_utils/
+  | ^/deepVogue/neuronal_network_utils/
+  | ^/deepVogue/_drive_sync\.py$
+  | ^/deepVogue/_paths\.py$
+  | ^/deepVogue/apply_factor\.py$
+  | ^/deepVogue/blend_models\.py$
+  | ^/deepVogue/calc_metrics\.py$
+  | ^/deepVogue/cinema\.py$
+  | ^/deepVogue/closed_form_factorization\.py$
+  | ^/deepVogue/combine_npz\.py$
+  | ^/deepVogue/dataset_tool\.py$
+  | ^/deepVogue/export_weights\.py$
+  | ^/deepVogue/flesh_digression\.py$
+  | ^/deepVogue/generate\.py$
+  | ^/deepVogue/legacy\.py$
+  | ^/deepVogue/pbaylies_projector\.py$
+  | ^/deepVogue/projector\.py$
+  | ^/deepVogue/style_mixing\.py$
+  | ^/deepVogue/train\.py$
+  | ^/deepVogue/train_legacy\.py$
+  | ^/deepVogue/walk\.py$
+)
+'''

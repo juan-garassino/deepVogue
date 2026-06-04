@@ -48,6 +48,7 @@ def status(model: str, last_n: int = 5) -> JSONResponse:
     """
     import json
     from deepVogue._paths import latest_snapshot
+
     try:
         entry = _registry.get(model)
     except KeyError:
@@ -68,13 +69,19 @@ def status(model: str, last_n: int = 5) -> JSONResponse:
                 rows.append(json.loads(line))
             except json.JSONDecodeError:
                 pass
-    latest = latest_snapshot(entry.id) if entry.dataset_kind in ("stills", "frames") else None
-    return JSONResponse({
-        "model": model,
-        "pkl": str(pkl_path),
-        "latest_snapshot": str(latest) if latest else None,
-        "fid_rows": rows[-last_n:],
-    })
+    latest = (
+        latest_snapshot(entry.id)
+        if entry.dataset_kind in ("stills", "frames")
+        else None
+    )
+    return JSONResponse(
+        {
+            "model": model,
+            "pkl": str(pkl_path),
+            "latest_snapshot": str(latest) if latest else None,
+            "fid_rows": rows[-last_n:],
+        }
+    )
 
 
 @app.get("/models")
@@ -89,8 +96,11 @@ def generate(req: GenerateRequest):
     except KeyError:
         raise HTTPException(404, f"unknown model: {req.model}")
     png = loader.generate(
-        entry, seed=req.seed, trunc=req.trunc,
-        factor_idx=req.factor_idx, factor_amp=req.factor_amp,
+        entry,
+        seed=req.seed,
+        trunc=req.trunc,
+        factor_idx=req.factor_idx,
+        factor_amp=req.factor_amp,
     )
     return Response(content=png, media_type="image/png")
 
@@ -104,8 +114,12 @@ def walk(req: WalkRequest):
     if len(req.seeds) < 2:
         raise HTTPException(400, "walk needs ≥2 seeds")
     mp4 = loader.walk(
-        entry, seeds=req.seeds, steps=req.steps, fps=req.fps,
-        mode=req.mode, trunc=req.trunc,
+        entry,
+        seeds=req.seeds,
+        steps=req.steps,
+        fps=req.fps,
+        mode=req.mode,
+        trunc=req.trunc,
     )
     return Response(content=mp4, media_type="video/mp4")
 
@@ -128,7 +142,9 @@ def _resolve_film_path(model_id: str, walk_id: str) -> Path:
         entry = None
     if walks_root is None:
         env = os.environ.get("DV_WALKS_DIR")
-        walks_root = (Path(env) / model_id) if env else (Path("/tmp/deepVogue/walks") / model_id)
+        walks_root = (
+            (Path(env) / model_id) if env else (Path("/tmp/deepVogue/walks") / model_id)
+        )
     candidate = walks_root / walk_id
     if candidate.suffix != ".mp4":
         candidate = candidate.with_suffix(".mp4")
