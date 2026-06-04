@@ -3,7 +3,8 @@ kind: Service
 metadata:
   name: deepvogue-inference
   annotations:
-    run.googleapis.com/launch-stage: BETA
+    run.googleapis.com/launch-stage: BETA  # required for GPU nodeSelector
+    run.googleapis.com/ingress: all
 spec:
   template:
     metadata:
@@ -11,6 +12,7 @@ spec:
         run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/startup-cpu-boost: "true"
         run.googleapis.com/vpc-access-connector: deepvogue-vpc
+        run.googleapis.com/vpc-access-egress: private-ranges-only
         run.googleapis.com/execution-environment: gen2
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "2"
