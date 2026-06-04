@@ -11,6 +11,13 @@ import requests
 
 log = logging.getLogger(__name__)
 
+_LEVEL_EMOJI = {
+    "success": ":white_check_mark:",
+    "failure": ":x:",
+    "info": ":information_source:",
+}
+_MAX_FIELDS = 10  # Slack section blocks cap fields; we silently truncate past this.
+
 
 def _post(blocks: list) -> None:
     url = os.environ.get("SLACK_WEBHOOK_URL")
@@ -28,18 +35,15 @@ def _fields(meta: Mapping[str, str] | None) -> list:
     if not meta:
         return []
     return [
-        {"type": "mrkdwn", "text": f"*{k}*\n{v}"} for k, v in list(meta.items())[:10]
+        {"type": "mrkdwn", "text": f"*{k}*\n{v}"}
+        for k, v in list(meta.items())[:_MAX_FIELDS]
     ]
 
 
 def notify_event(
     channel_tag: str, level: str, headline: str, meta: Mapping[str, str] | None = None
 ) -> None:
-    emoji = {
-        "success": ":white_check_mark:",
-        "failure": ":x:",
-        "info": ":information_source:",
-    }.get(level, ":bell:")
+    emoji = _LEVEL_EMOJI.get(level, ":bell:")
     blocks = [
         {
             "type": "section",

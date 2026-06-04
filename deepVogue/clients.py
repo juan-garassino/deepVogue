@@ -7,24 +7,27 @@ from typing import Any
 
 import fsspec
 
-_SUPPORTED = {"s3", "gcs", "memory", "file"}
+# Maps DV_ARTIFACT_BACKEND value to its URI scheme prefix (empty for local fs).
+_BACKEND_SCHEMES = {"s3": "s3://", "gcs": "gs://", "memory": "memory://", "file": ""}
+
+
+def _backend() -> str:
+    backend = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
+    if backend not in _BACKEND_SCHEMES:
+        raise ValueError(
+            f"unknown DV_ARTIFACT_BACKEND={backend!r}; "
+            f"expected one of {set(_BACKEND_SCHEMES)}"
+        )
+    return backend
 
 
 def get_artifact_fs() -> Any:
-    backend = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
-    if backend not in _SUPPORTED:
-        raise ValueError(
-            f"unknown DV_ARTIFACT_BACKEND={backend!r}; expected one of {_SUPPORTED}"
-        )
+    backend = _backend()
     if backend == "s3":
         endpoint = os.environ.get("DV_S3_ENDPOINT_URL")
         client_kwargs = {"endpoint_url": endpoint} if endpoint else {}
         return fsspec.filesystem("s3", client_kwargs=client_kwargs)
-    if backend == "gcs":
-        return fsspec.filesystem("gcs")
-    if backend == "memory":
-        return fsspec.filesystem("memory")
-    return fsspec.filesystem("file")
+    return fsspec.filesystem(backend)
 
 
 def resolve_uri(uri: str) -> str:
@@ -44,10 +47,7 @@ def artifact_uri(bucket: str, *parts: str) -> str:
     For backend=file (or unset), returns a relative `bucket/parts...` path
     suitable for the local filesystem.
     """
-    backend = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
-    scheme = {"s3": "s3://", "gcs": "gs://", "memory": "memory://", "file": ""}.get(
-        backend, ""
+    scheme = _BACKEND_SCHEMES.get(
+        os.environ.get("DV_ARTIFACT_BACKEND", "file").lower(), ""
     )
-    suffix = "/".join(parts) if parts else ""
-    base = f"{scheme}{bucket}" if scheme else bucket
-    return f"{base}/{suffix}".rstrip("/")
+    return "/".join((f"{scheme}{bucket}", *parts)).rstrip("/")
