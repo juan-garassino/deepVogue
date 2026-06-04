@@ -1,5 +1,10 @@
 name: deepvogue-nano
 
+# Shared S3 (MinIO) credentials reused by services that read/write artifacts.
+x-aws-env: &aws-env
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -46,11 +51,10 @@ services:
     build:
       context: docker/mlflow
     environment:
+      <<: *aws-env
       MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
       MLFLOW_ARTIFACTS_DESTINATION: ${MLFLOW_ARTIFACTS_DESTINATION}
       MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,10 +82,9 @@ services:
       context: ..
       dockerfile: infra/docker/inference/Dockerfile
     environment:
+      <<: *aws-env
       DV_ARTIFACT_BACKEND: ${DV_ARTIFACT_BACKEND}
       DV_S3_ENDPOINT_URL: ${DV_S3_ENDPOINT_URL}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       DV_MODELS_YAML: ${DV_MODELS_YAML}
       DV_MODELS_ROOT: ${DV_MODELS_ROOT}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
