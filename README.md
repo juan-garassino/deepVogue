@@ -98,6 +98,29 @@ make film FILM_ID=opening_scene DV_PROJ_STRIDE=4 DV_PROJ_STEPS=500
 make test
 ```
 
+## Local nano-mode (MLOps stack)
+
+Bring up an end-to-end stack on your laptop in two commands:
+
+```bash
+cp infra/.env.example infra/.env
+make nano-up        # postgres + minio + mlflow + prefect + fastapi
+make nano-smoke     # run pipeline_stills end-to-end (mocked train/walk on Mac)
+make nano-down
+```
+
+Endpoints: MLflow http://localhost:5000 · Prefect http://localhost:4200 · FastAPI http://localhost:8080 · MinIO http://localhost:9001
+
+## GCP deployment
+
+```bash
+export GCP_PROJECT=your-project GITHUB_REPO=owner/deepvogue
+make gcp-setup                      # APIs, buckets, AR repo, Cloud SQL, runtime SAs, WIF
+make deploy-mlflow deploy-prefect deploy-inference
+```
+
+After the first GCP deployment, register your Workload Identity Federation outputs (printed at the end of `setup-iam.sh`) as GitHub repo secrets: `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`, `SLACK_WEBHOOK_URL`.
+
 ## License
 
 StyleGAN3 and StyleGAN2-ADA code under NVIDIA's source-code license; everything
