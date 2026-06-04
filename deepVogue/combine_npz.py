@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import click
 import PIL.Image
-import neuronal_network_utils
-import legacy
+from deepVogue import neuronal_network_utils
+from deepVogue import legacy
 
 # ----------------------------------------------------------------------------
 

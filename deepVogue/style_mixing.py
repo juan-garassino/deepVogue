@@ -13,12 +13,12 @@ import re
 from typing import List
 
 import click
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils
 import numpy as np
 import PIL.Image
 import torch
 
-import legacy
+from deepVogue import legacy
 
 # ----------------------------------------------------------------------------
 

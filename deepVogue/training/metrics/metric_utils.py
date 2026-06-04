@@ -14,7 +14,7 @@ import copy
 import uuid
 import numpy as np
 import torch
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils
 
 # ----------------------------------------------------------------------------
 

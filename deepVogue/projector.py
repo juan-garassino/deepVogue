@@ -19,8 +19,8 @@ import PIL.Image
 import torch
 import torch.nn.functional as F
 
-import neuronal_network_utils
-import legacy
+from deepVogue import neuronal_network_utils
+from deepVogue import legacy
 
 
 def project(

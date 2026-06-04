@@ -14,14 +14,14 @@ import json
 import tempfile
 import copy
 import torch
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils
 
-import legacy
+from deepVogue import legacy
 from metrics import metric_main
 from metrics import metric_utils
-from pytorch_utils import training_stats
-from pytorch_utils import custom_ops
-from pytorch_utils import misc
+from deepVogue.pytorch_utils import training_stats
+from deepVogue.pytorch_utils import custom_ops
+from deepVogue.pytorch_utils import misc
 
 # ----------------------------------------------------------------------------
 

@@ -6,8 +6,8 @@ import torch
 from torchvision import (
     utils,
 )  # assumes you use torchvision 0.8.2; if you use the latest version, see comments below
-import legacy
-import neuronal_network_utils
+from deepVogue import legacy
+from deepVogue import neuronal_network_utils
 from typing import List
 import numpy as np
 import random

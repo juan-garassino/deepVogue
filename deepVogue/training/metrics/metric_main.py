@@ -10,7 +10,7 @@ import os
 import time
 import json
 import torch
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils
 
 from . import metric_utils
 from . import frechet_inception_distance

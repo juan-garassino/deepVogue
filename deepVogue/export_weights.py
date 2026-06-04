@@ -5,8 +5,8 @@ import click
 import numpy as np
 import torch
 
-import neuronal_network_utils
-import legacy
+from deepVogue import neuronal_network_utils
+from deepVogue import legacy
 
 
 def convert_to_rgb(state_ros, state_nv, ros_name, nv_name):

@@ -14,7 +14,7 @@ https://github.com/NVlabs/stylegan/blob/master/metrics/perceptual_path_length.py
 import copy
 import numpy as np
 import torch
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils
 from . import metric_utils
 
 # ----------------------------------------------------------------------------

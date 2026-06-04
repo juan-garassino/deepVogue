@@ -14,13 +14,13 @@ import re
 from typing import List, Optional
 
 import click
-import neuronal_network_utils
+from deepVogue import neuronal_network_utils
 import numpy as np
 from numpy import linalg
 import PIL.Image
 import torch
 
-import legacy
+from deepVogue import legacy
 
 from opensimplex import OpenSimplex
 

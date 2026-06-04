@@ -12,8 +12,8 @@ import re
 import copy
 import numpy as np
 import torch
-import neuronal_network_utils
-from pytorch_utils import misc
+from deepVogue import neuronal_network_utils
+from deepVogue.pytorch_utils import misc
 
 # ----------------------------------------------------------------------------
 

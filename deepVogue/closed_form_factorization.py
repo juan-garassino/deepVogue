@@ -1,7 +1,7 @@
 import argparse
 import torch
-import neuronal_network_utils
-import legacy
+from deepVogue import neuronal_network_utils
+from deepVogue import legacy
 import pickle
 
 if __name__ == "__main__":

@@ -17,8 +17,8 @@ import numpy as np
 import torch
 from numpy import linalg
 
-import neuronal_network_utils
-import legacy
+from deepVogue import neuronal_network_utils
+from deepVogue import legacy
 
 
 def circular_interpolation(
