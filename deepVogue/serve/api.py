@@ -43,32 +43,35 @@ def status(model: str, last_n: int = 5) -> JSONResponse:
     """Tail metric-fid50k_full.jsonl for the registered model.
 
     Returns the last `last_n` FID rows and the highest-kimg snapshot path.
-    `model` must be a registered id (the run is discovered from
-    `<pkl-parent>/metric-fid50k_full.jsonl`).
+    `model` must be a registered id; the FID log is discovered as
+    `<pkl-parent>/metric-fid50k_full.jsonl` via fsspec so it works for
+    `s3://`, `gs://`, `memory://`, or plain local paths.
     """
     import json
+    import fsspec
     from deepVogue._paths import latest_snapshot
 
     try:
         entry = _registry.get(model)
     except KeyError:
         raise HTTPException(404, f"unknown model: {model}")
-    pkl_path = Path(entry.pkl)
-    run_dir = pkl_path.parent
-    log = run_dir / "metric-fid50k_full.jsonl"
-    if not log.exists():
-        # fall back to any FID log under run_dir
-        log = next(run_dir.rglob("metric-fid50k_full.jsonl"), None)
+    pkl_uri = entry.pkl_resolved or entry.pkl
+    run_uri = pkl_uri.rsplit("/", 1)[0] if "/" in pkl_uri else pkl_uri
+    jsonl_uri = f"{run_uri}/metric-fid50k_full.jsonl"
     rows = []
-    if log and log.exists():
-        for line in log.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
+    try:
+        with fsspec.open(jsonl_uri, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    except (FileNotFoundError, OSError):
+        # No FID log yet (or unreachable backend) — return empty rows.
+        rows = []
     latest = (
         latest_snapshot(entry.id)
         if entry.dataset_kind in ("stills", "frames")
@@ -77,7 +80,7 @@ def status(model: str, last_n: int = 5) -> JSONResponse:
     return JSONResponse(
         {
             "model": model,
-            "pkl": str(pkl_path),
+            "pkl": pkl_uri,
             "latest_snapshot": str(latest) if latest else None,
             "fid_rows": rows[-last_n:],
         }
