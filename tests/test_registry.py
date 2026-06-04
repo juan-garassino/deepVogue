@@ -94,42 +94,18 @@ def test_malformed_raises(tmp_path):
 
 def test_registry_accepts_absolute_gs_uri(tmp_path, monkeypatch):
     monkeypatch.setenv("DV_MODELS_ROOT", str(tmp_path))
-    yml = tmp_path / "models.yaml"
-    yml.write_text(
-        yaml.safe_dump(
-            [
-                {
-                    "id": "a",
-                    "backbone": "sg3-t",
-                    "pkl": "gs://b/a.pkl",
-                    "dataset_kind": "stills",
-                },
-            ]
-        )
-    )
-    reg = Registry(yml)
-    entry = reg.get("a")
+    y = tmp_path / "models.yaml"
+    _seed_yaml(y, [{"id": "a", "pkl": "gs://b/a.pkl"}])
+    entry = Registry(y).get("a")
+    # absolute URIs pass through resolve_uri() unchanged
     assert entry["pkl"] == "gs://b/a.pkl"
+    assert entry["pkl_resolved"] == "gs://b/a.pkl"
 
 
 def test_registry_resolves_relative_against_models_root(tmp_path, monkeypatch):
     monkeypatch.setenv("DV_MODELS_ROOT", str(tmp_path))
-    (tmp_path / "tarot").mkdir()
-    (tmp_path / "tarot" / "snap.pkl").write_bytes(b"\x00")
-    yml = tmp_path / "models.yaml"
-    yml.write_text(
-        yaml.safe_dump(
-            [
-                {
-                    "id": "tarot",
-                    "backbone": "sg3-t",
-                    "pkl": "tarot/snap.pkl",
-                    "dataset_kind": "stills",
-                },
-            ]
-        )
-    )
-    reg = Registry(yml)
-    entry = reg.get("tarot")
-    # contract: registry passes the path through resolve_uri()
+    y = tmp_path / "models.yaml"
+    _seed_yaml(y, [{"id": "tarot", "pkl": "tarot/snap.pkl"}])
+    entry = Registry(y).get("tarot")
+    # relative paths are prefixed with DV_MODELS_ROOT by resolve_uri()
     assert entry["pkl_resolved"].endswith("/tarot/snap.pkl")
