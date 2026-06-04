@@ -1,0 +1,30 @@
+name: build-train
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/train
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      - run: docker build -f infra/docker/train/Dockerfile -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+      - run: docker push $IMAGE:${{ github.sha }} && docker push $IMAGE:latest
+      - if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with: { payload: '{"text":":x: build-train failed"}' }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
