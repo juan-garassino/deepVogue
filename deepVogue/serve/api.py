@@ -56,8 +56,7 @@ def status(model: str, last_n: int = 5) -> JSONResponse:
     except KeyError:
         raise HTTPException(404, f"unknown model: {model}")
     pkl_uri = entry.pkl_resolved or entry.pkl
-    run_uri = pkl_uri.rsplit("/", 1)[0] if "/" in pkl_uri else pkl_uri
-    jsonl_uri = f"{run_uri}/metric-fid50k_full.jsonl"
+    jsonl_uri = f"{pkl_uri.rsplit('/', 1)[0]}/metric-fid50k_full.jsonl"
     rows = []
     try:
         with fsspec.open(jsonl_uri, "r") as f:
