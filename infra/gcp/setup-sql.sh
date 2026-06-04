@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
-PROJECT="${GCP_PROJECT:?}"
-REGION="${GCP_REGION:-us-central1}"
+# shellcheck source=_common.sh
+source "$(dirname "$0")/_common.sh"
 INSTANCE="deepvogue-pg"
 NETWORK="default"
 

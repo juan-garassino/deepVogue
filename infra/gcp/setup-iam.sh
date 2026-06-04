@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
-PROJECT="${GCP_PROJECT:?}"
+# shellcheck source=_common.sh
+source "$(dirname "$0")/_common.sh"
 GH_REPO="${GITHUB_REPO:?owner/repo}"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 
