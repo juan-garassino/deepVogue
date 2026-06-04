@@ -64,6 +64,17 @@ def test_publish_uploads_and_appends_models_yaml(tmp_path, monkeypatch):
     assert info["fid"] == 98.6
 
 
+def test_publish_auto_derives_backend_from_target(tmp_path, monkeypatch):
+    monkeypatch.delenv("DV_ARTIFACT_BACKEND", raising=False)
+    monkeypatch.setenv("DV_PUBLISH_TARGET", "memory://deepvogue-models")
+    drive = _make_drive_snapshot(tmp_path)
+    with patch("deepVogue.publish._validate_pkl", return_value=None):
+        publish_checkpoint(
+            model_id="t", src_dir=drive, backbone="sg3-t", dataset_kind="stills"
+        )
+    assert os.environ["DV_ARTIFACT_BACKEND"] == "memory"
+
+
 def test_publish_appends_when_registry_exists(tmp_path, monkeypatch):
     monkeypatch.setenv("DV_ARTIFACT_BACKEND", "memory")
     monkeypatch.setenv("DV_PUBLISH_TARGET", "memory://deepvogue-models")

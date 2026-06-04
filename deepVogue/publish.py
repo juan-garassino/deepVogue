@@ -76,6 +76,20 @@ def publish_checkpoint(
     target_root = os.environ.get("DV_PUBLISH_TARGET")
     if not target_root:
         raise RuntimeError("DV_PUBLISH_TARGET must be set (e.g. gs://deepvogue-models)")
+    # Auto-derive DV_ARTIFACT_BACKEND from target URI scheme so a forgotten
+    # `export DV_ARTIFACT_BACKEND=gcs` doesn't silently route writes to the
+    # local fs.
+    target_scheme = target_root.split("://", 1)[0] if "://" in target_root else "file"
+    scheme_to_backend = {"gs": "gcs", "s3": "s3", "memory": "memory", "file": "file"}
+    expected_backend = scheme_to_backend.get(target_scheme, "file")
+    current_backend = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
+    if current_backend != expected_backend:
+        log.info(
+            "auto-setting DV_ARTIFACT_BACKEND=%s to match target scheme %s",
+            expected_backend,
+            target_scheme,
+        )
+        os.environ["DV_ARTIFACT_BACKEND"] = expected_backend
     fs = get_artifact_fs()
     target_path = _strip_proto(target_root).rstrip("/")
 
