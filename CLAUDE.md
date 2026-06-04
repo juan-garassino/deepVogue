@@ -68,6 +68,35 @@ The canonical entry point is `notebooks/deepVogue_colab.ipynb` (cells 00–07: s
 
 **Bootstrap on Colab is GitHub-clone**: `git clone --depth 1 --branch master $GITHUB_URL /content/deepVogue` followed by `make colab-install` (which `pip install -e .`s the repo and apt-installs ffmpeg). Drive holds *data and outputs only* (`/MyDrive/deepVogue/{data,datasets,runs,anchors,walks}/...`); the code is never zipped onto Drive.
 
+## MLOps stack
+
+Local-nano stack (docker-compose) mirrors the prod-GCP stack one-for-one. Same code, same `models.yaml`, same flows — only the artifact backend (`DV_ARTIFACT_BACKEND=s3` → MinIO vs `gcs` → GCS) and endpoint URLs change.
+
+| Env var | Purpose |
+|---|---|
+| `DV_ARTIFACT_BACKEND` | `s3` (MinIO local), `gcs` (prod), `memory` (tests), `file` (default) |
+| `DV_S3_ENDPOINT_URL` | MinIO URL when backend=s3 |
+| `DV_MODELS_YAML` | Full URI to `models.yaml` (e.g. `gs://deepvogue-models/models.yaml`) |
+| `DV_MODELS_ROOT` | Resolution root for relative `pkl:` entries (back-compat) |
+| `DV_PUBLISH_TARGET` | Where `make publish` uploads (e.g. `gs://deepvogue-models`) |
+| `MLFLOW_TRACKING_URI` | MLflow server URL (Cloud Run in prod) |
+| `MLFLOW_TRACKING_TOKEN` | IAP id_token for programmatic access from Colab |
+| `PREFECT_API_URL` | Prefect server API URL |
+| `SLACK_WEBHOOK_URL` | Optional; if unset, Slack helpers no-op |
+
+GCS bucket layout (prod): `gs://deepvogue-{models,datasets,walks,mlflow,queue}`. Artifact Registry: `us-central1-docker.pkg.dev/<project>/deepvogue/{inference,mlflow,prefect-server,prefect-worker,train}`.
+
+New Makefile targets:
+- `make nano-up` / `nano-down` / `nano-logs` — local docker-compose stack
+- `make nano-smoke` — full pipeline against the local stack
+- `make publish MODEL_ID=...` — Drive → GCS + `models.yaml` append + Slack
+- `make gcp-setup` — runs `infra/gcp/setup.sh` + setup-sql.sh + setup-iam.sh
+- `make deploy-inference` / `deploy-mlflow` / `deploy-prefect` — Cloud Run deploy
+
+Prefect flows live in `deepVogue/orchestration/flows.py`. Each task dispatches via `get_backend(backend)`; v1 supports `backend="local"` (real `prepare`/`publish`, mock `train`/`project`/`walk`/`eval`). `colab` and `runpod` backends are scaffolded but raise `NotImplementedError` in v1 — manual Colab + `make publish` is the v1 training path.
+
+Colab logs to remote MLflow via `deepVogue/tracking/mlflow_helpers.py::log_training_run`. IAP auth: notebook cell sets `MLFLOW_TRACKING_TOKEN` from `gcloud auth print-identity-token --audiences=<iap-oauth-client-id>`.
+
 ## Common Commands
 
 The `Makefile` is the canonical entry point for repo housekeeping; ML workflows are run directly via the scripts in `deepVogue/`.
