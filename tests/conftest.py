@@ -14,4 +14,5 @@ _PREFECT_HOME = os.environ.get("PREFECT_HOME_OVERRIDE") or os.path.join(
     tempfile.gettempdir(), "prefect-deepvogue-tests"
 )
 os.environ.setdefault("PREFECT_HOME", _PREFECT_HOME)
+os.environ.setdefault("PREFECT_TELEMETRY_ENABLED", "false")
 os.makedirs(_PREFECT_HOME, exist_ok=True)
