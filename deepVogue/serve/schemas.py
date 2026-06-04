@@ -23,7 +23,7 @@ class ModelEntry(BaseModel):
         if self.pkl_resolved is None:
             from deepVogue.clients import resolve_uri
 
-            object.__setattr__(self, "pkl_resolved", resolve_uri(self.pkl))
+            self.pkl_resolved = resolve_uri(self.pkl)
 
     def __getitem__(self, key: str):
         """Dict-style read access for registry consumers (`entry["pkl_resolved"]`)."""
