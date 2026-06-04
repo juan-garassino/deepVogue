@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import logging
-import os
 import time
 import zipfile
 from pathlib import Path
@@ -17,6 +16,18 @@ import torch
 from deepVogue.clients import get_artifact_fs
 
 log = logging.getLogger(__name__)
+
+
+def _split_uri(target_uri: str) -> tuple[str, str]:
+    """Normalize a fsspec-style URI and return ``(uri_no_slash, fs_path)``.
+
+    For ``memory://bucket``, ``fs_path`` is ``/bucket`` (what fsspec's memory
+    filesystem expects). For a plain local path the two values match.
+    """
+    target_uri = target_uri.rstrip("/")
+    if "://" in target_uri:
+        return target_uri, "/" + target_uri.split("://", 1)[1]
+    return target_uri, target_uri
 
 
 # ----- real -----
@@ -52,13 +63,7 @@ def prepare(
     if not images:
         raise RuntimeError(f"no images found under {src}")
 
-    target_uri = target_uri.rstrip("/")
-    proto, path = (
-        (target_uri.split("://", 1) + [""])[:2]
-        if "://" in target_uri
-        else (None, target_uri)
-    )
-    target_path = f"/{path}" if proto else target_uri
+    target_uri, target_path = _split_uri(target_uri)
     zip_path = f"{target_path}/{dataset_name}.zip"
 
     buf = io.BytesIO()
@@ -68,7 +73,9 @@ def prepare(
     with fs.open(zip_path, "wb") as f:
         f.write(buf.getvalue())
 
-    dataset_uri = f"{target_uri}/{dataset_name}.zip" if proto else zip_path
+    dataset_uri = (
+        f"{target_uri}/{dataset_name}.zip" if "://" in target_uri else zip_path
+    )
     return {"dataset_uri": dataset_uri, "n_images": len(images)}
 
 
@@ -83,18 +90,26 @@ def publish(**kw) -> dict[str, Any]:
 # ----- mock -----
 
 
+_STUB_FIXTURE = (
+    Path(__file__).resolve().parents[3]
+    / "tests"
+    / "fixtures"
+    / "stub_sg3_state_dict.pt"
+)
+_STUB_STATE_DICT_CACHE: dict[str, Any] | None = None
+
+
 def _stub_state_dict() -> dict[str, Any]:
-    fp = (
-        Path(__file__).resolve().parents[3]
-        / "tests"
-        / "fixtures"
-        / "stub_sg3_state_dict.pt"
-    )
-    if not fp.exists():
-        raise FileNotFoundError(
-            f"stub state dict missing at {fp} — run `python scripts/build_stub_state_dict.py`"
+    global _STUB_STATE_DICT_CACHE
+    if _STUB_STATE_DICT_CACHE is None:
+        if not _STUB_FIXTURE.exists():
+            raise FileNotFoundError(
+                f"stub state dict missing at {_STUB_FIXTURE} — run `python scripts/build_stub_state_dict.py`"
+            )
+        _STUB_STATE_DICT_CACHE = torch.load(
+            _STUB_FIXTURE, map_location="cpu", weights_only=False
         )
-    return torch.load(fp, map_location="cpu", weights_only=False)
+    return _STUB_STATE_DICT_CACHE
 
 
 def train(
@@ -111,11 +126,9 @@ def train(
     log.info("[nano-mock] training %s on %s for %d kimg", cfg, dataset_name, kimg)
     time.sleep(min(kimg / 50.0, 5.0))
     fs = get_artifact_fs()
-    target_uri = (
+    target_uri, target_path = _split_uri(
         target_uri or f"memory://deepvogue-models/{dataset_name}_nano"
-    ).rstrip("/")
-    proto = "://" in target_uri
-    target_path = "/" + target_uri.split("://", 1)[1] if proto else target_uri
+    )
     pkl_path = f"{target_path}/network-snapshot-{kimg:06d}.pkl"
     state = _stub_state_dict()
     buf = io.BytesIO()
@@ -123,7 +136,11 @@ def train(
     with fs.open(pkl_path, "wb") as f:
         f.write(buf.getvalue())
     fid = max(5.0, 200.0 - kimg / 25.0)  # fake monotonic decrease
-    pkl_uri = f"{target_uri}/network-snapshot-{kimg:06d}.pkl" if proto else pkl_path
+    pkl_uri = (
+        f"{target_uri}/network-snapshot-{kimg:06d}.pkl"
+        if "://" in target_uri
+        else pkl_path
+    )
     return {"pkl": pkl_uri, "fid": fid, "kimg": kimg}
 
 
@@ -139,9 +156,7 @@ def project(
     log.info("[nano-mock] project %s stride=%d steps=%d", model_id, stride, steps)
     time.sleep(1.0)
     fs = get_artifact_fs()
-    target_uri = target_uri.rstrip("/")
-    proto = "://" in target_uri
-    target_path = "/" + target_uri.split("://", 1)[1] if proto else target_uri
+    target_uri, target_path = _split_uri(target_uri)
     out_uri = f"{target_path}/{model_id}/0/projected_w.npz"
     arr = np.zeros((1, 16, 512), dtype=np.float32)
     buf = io.BytesIO()
@@ -165,9 +180,7 @@ def walk(
     log.info("[nano-mock] walk %s steps=%d fps=%d mode=%s", model_id, steps, fps, mode)
     time.sleep(1.0)
     fs = get_artifact_fs()
-    target_uri = target_uri.rstrip("/")
-    proto = "://" in target_uri
-    target_path = "/" + target_uri.split("://", 1)[1] if proto else target_uri
+    target_uri, target_path = _split_uri(target_uri)
     walk_id = f"walk_{int(time.time())}"
     out = f"{target_path}/{model_id}/{walk_id}.mp4"
     with fs.open(out, "wb") as f:
