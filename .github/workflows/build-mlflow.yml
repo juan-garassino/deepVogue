@@ -1,0 +1,54 @@
+name: build-mlflow
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'infra/docker/mlflow/**'
+      - 'infra/cloudrun/mlflow.service.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    env:
+      REGION: us-central1
+      IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/mlflow
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      - name: Build & push
+        run: |
+          docker build -f infra/docker/mlflow/Dockerfile -t $IMAGE:${{ github.sha }} -t $IMAGE:latest infra/docker/mlflow
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+      - name: Deploy
+        run: |
+          sed "s|PROJECT_ID|${{ secrets.GCP_PROJECT }}|g; s|:latest|:${{ github.sha }}|g" infra/cloudrun/mlflow.service.yaml | \
+            gcloud run services replace - --region=$REGION --project=${{ secrets.GCP_PROJECT }}
+      - name: Smoke
+        id: smoke
+        run: |
+          URL=$(gcloud run services describe deepvogue-mlflow --region=$REGION --project=${{ secrets.GCP_PROJECT }} --format='value(status.url)')
+          for i in 1 2 3 4 5; do curl -fsS "$URL" >/dev/null && { echo "url=$URL" >> $GITHUB_OUTPUT; exit 0; }; sleep 5; done
+          exit 1
+      - if: success()
+        uses: slackapi/slack-github-action@v1.27.0
+        with: { payload: '{"text":":white_check_mark: mlflow deployed — ${{ steps.smoke.outputs.url }}"}' }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with: { payload: '{"text":":x: mlflow build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
