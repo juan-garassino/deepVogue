@@ -1,0 +1,85 @@
+name: build-inference
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'deepVogue/serve/**'
+      - 'infra/docker/inference/**'
+      - 'requirements.txt'
+      - 'requirements-serve.txt'
+      - 'infra/cloudrun/inference.service.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    env:
+      REGION: us-central1
+      IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/inference
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Slack start
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: '{"text":":arrows_counterclockwise: building inference @ ${{ github.sha }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Configure docker for AR
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build image
+        run: docker build -f infra/docker/inference/Dockerfile -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+
+      - name: Push image
+        run: |
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+
+      - name: Deploy Cloud Run
+        run: |
+          sed "s|PROJECT_ID|${{ secrets.GCP_PROJECT }}|g; s|:latest|:${{ github.sha }}|g" infra/cloudrun/inference.service.yaml | \
+            gcloud run services replace - --region=$REGION --project=${{ secrets.GCP_PROJECT }}
+
+      - name: Health smoke
+        id: smoke
+        run: |
+          URL=$(gcloud run services describe deepvogue-inference --region=$REGION --project=${{ secrets.GCP_PROJECT }} --format='value(status.url)')
+          for i in 1 2 3 4 5; do
+            if curl -fsS "$URL/health" >/dev/null; then
+              echo "url=$URL" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Slack success
+        if: success()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: '{"text":":white_check_mark: inference deployed — ${{ steps.smoke.outputs.url }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Slack fail
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: '{"text":":x: inference build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
