@@ -326,7 +326,7 @@ nano-smoke: ## Run the local-nano integration smoke against a running stack
 	python scripts/run_nano_smoke.py
 
 # === MLOps stack — GCP deploy ===
-.PHONY: deploy-inference deploy-mlflow deploy-prefect gcp-setup publish
+.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring gcp-setup publish
 
 GCP_REGION ?= us-central1
 GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
@@ -359,6 +359,10 @@ gcp-setup:
 	bash infra/gcp/setup.sh
 	bash infra/gcp/setup-sql.sh
 	bash infra/gcp/setup-iam.sh
+	bash infra/gcp/setup-monitoring.sh || echo "monitoring setup failed; re-run \`make deploy-monitoring\` after deploying services"
+
+deploy-monitoring: ## Cloud Monitoring uptime + alerts (requires SLACK_WEBHOOK_URL)
+	bash infra/gcp/setup-monitoring.sh
 
 # === RunPod training backend ===
 .PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop

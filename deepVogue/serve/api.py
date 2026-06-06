@@ -20,6 +20,14 @@ _registry = Registry()
 @app.on_event("startup")
 def warm_models() -> None:
     """Pre-load the first two registered models so first request isn't cold."""
+    # IAP id-token refresher for IAP-fronted MLflow. No-op without env config.
+    try:
+        from deepVogue.tracking.iap import start_iap_token_refresher
+
+        start_iap_token_refresher()
+    except Exception as e:
+        print(f"[serve] iap refresher skipped: {e}")
+
     try:
         entries = _registry.list()[:2]
     except Exception as e:

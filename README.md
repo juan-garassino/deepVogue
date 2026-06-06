@@ -150,6 +150,14 @@ make deploy-mlflow deploy-prefect deploy-inference
 
 After the first GCP deployment, register your Workload Identity Federation outputs (printed at the end of `setup-iam.sh`) as GitHub repo secrets: `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`, `SLACK_WEBHOOK_URL`.
 
+## Monitoring
+
+```bash
+SLACK_WEBHOOK_URL=... make deploy-monitoring
+```
+
+Provisions uptime checks on each Cloud Run service's `/health` plus alert policies (uptime, 5xx, Cloud SQL CPU) routed to a Slack webhook channel.
+
 ## License
 
 StyleGAN3 and StyleGAN2-ADA code under NVIDIA's source-code license; everything

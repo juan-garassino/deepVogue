@@ -1,4 +1,9 @@
-"""MLflow logging helpers for deepVogue training runs."""
+"""MLflow logging helpers for deepVogue training runs.
+
+Auth: the MLflow client honors ``MLFLOW_TRACKING_TOKEN`` (sent as a Bearer
+header). For IAP-fronted MLflow on Cloud Run, ``deepVogue.tracking.iap``
+keeps that env var fresh via the GCE metadata server.
+"""
 
 from __future__ import annotations
 

@@ -125,6 +125,20 @@ Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), 
 
 Per-tick MLflow logging from the pod is **deferred to v2** (IAP id-token broker needed from non-GCP infra); v1 captures the final FID in `models.yaml` via `publish`.
 
+**Reference / lineage:** the container shape (CUDA-devel base + scripted entrypoint + `make build`/`push`/`run`/`logs` targets) is modeled on `../../020-autoresearch/` (`Dockerfile` + `entrypoint.sh`). deepVogue differs in three ways: no Claude-in-the-loop (plain training job, not autonomous research), GCS-backed data + outputs instead of in-container state, and self-terminate via RunPod GraphQL so the orchestrator can `_wait` on pod disappearance.
+
+### Inference container
+
+The Cloud Run inference image (`infra/docker/inference/Dockerfile`) ships from a **CUDA devel base** (`pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel`) because the SG3 custom ops at `deepVogue/pytorch_utils/ops/{bias_act,upfirdn2d}.py` JIT-compile via `torch.utils.cpp_extension.load()` at *import time* — without `nvcc` the FastAPI warmup raises on the first model load. Trade-off: image is ~2-3GB larger than runtime-only; well within Cloud Run's 32GB limit.
+
+On startup `deepVogue/serve/api.py` calls `deepVogue.tracking.iap.start_iap_token_refresher()` — a silent no-op unless `IAP_OAUTH_CLIENT_ID` is set, in which case a daemon thread pulls an id-token from the GCE metadata server every 30 min and writes it to `MLFLOW_TRACKING_TOKEN`. MLflow's Python client reads that env var as a Bearer header, so an IAP-fronted MLflow on Cloud Run is reachable from the inference container without per-call auth wiring.
+
+### Monitoring + alerts
+
+`infra/gcp/setup-monitoring.sh` (idempotent) provisions uptime checks against `/health` for `deepvogue-{inference,mlflow,prefect-server}` and three alert policies — uptime failure, Cloud Run 5xx > 5%, Cloud SQL CPU > 80% — all attached to a Slack notification channel (webhook-token auth from `SLACK_WEBHOOK_URL`). Triggered by `make deploy-monitoring`, and tail-chained into `make gcp-setup`. Independent of in-app `deepVogue.notifications.slack.*` calls.
+
+URI helpers consolidated: `deepVogue/clients.py::{strip_scheme, split_uri, scheme_of}` are the canonical home; `publish._strip_proto` and `local._split_uri` are gone.
+
 ## Common Commands
 
 The `Makefile` is the canonical entry point for repo housekeeping; ML workflows are run directly via the scripts in `deepVogue/`.

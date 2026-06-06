@@ -13,21 +13,9 @@ from PIL import Image
 import numpy as np
 import torch
 
-from deepVogue.clients import get_artifact_fs
+from deepVogue.clients import get_artifact_fs, split_uri
 
 log = logging.getLogger(__name__)
-
-
-def _split_uri(target_uri: str) -> tuple[str, str]:
-    """Normalize a fsspec-style URI and return ``(uri_no_slash, fs_path)``.
-
-    For ``memory://bucket``, ``fs_path`` is ``/bucket`` (what fsspec's memory
-    filesystem expects). For a plain local path the two values match.
-    """
-    target_uri = target_uri.rstrip("/")
-    if "://" in target_uri:
-        return target_uri, "/" + target_uri.split("://", 1)[1]
-    return target_uri, target_uri
 
 
 # ----- real -----
@@ -63,7 +51,7 @@ def prepare(
     if not images:
         raise RuntimeError(f"no images found under {src}")
 
-    target_uri, target_path = _split_uri(target_uri)
+    target_uri, target_path = split_uri(target_uri)
     zip_path = f"{target_path}/{dataset_name}.zip"
 
     buf = io.BytesIO()
@@ -126,7 +114,7 @@ def train(
     log.info("[nano-mock] training %s on %s for %d kimg", cfg, dataset_name, kimg)
     time.sleep(min(kimg / 50.0, 5.0))
     fs = get_artifact_fs()
-    target_uri, target_path = _split_uri(
+    target_uri, target_path = split_uri(
         target_uri or f"memory://deepvogue-models/{dataset_name}_nano"
     )
     pkl_path = f"{target_path}/network-snapshot-{kimg:06d}.pkl"
@@ -156,7 +144,7 @@ def project(
     log.info("[nano-mock] project %s stride=%d steps=%d", model_id, stride, steps)
     time.sleep(1.0)
     fs = get_artifact_fs()
-    target_uri, target_path = _split_uri(target_uri)
+    target_uri, target_path = split_uri(target_uri)
     out_uri = f"{target_path}/{model_id}/0/projected_w.npz"
     arr = np.zeros((1, 16, 512), dtype=np.float32)
     buf = io.BytesIO()
@@ -180,7 +168,7 @@ def walk(
     log.info("[nano-mock] walk %s steps=%d fps=%d mode=%s", model_id, steps, fps, mode)
     time.sleep(1.0)
     fs = get_artifact_fs()
-    target_uri, target_path = _split_uri(target_uri)
+    target_uri, target_path = split_uri(target_uri)
     walk_id = f"walk_{int(time.time())}"
     out = f"{target_path}/{model_id}/{walk_id}.mp4"
     with fs.open(out, "wb") as f:

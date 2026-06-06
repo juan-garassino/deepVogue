@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from deepVogue.clients import get_artifact_fs
+from deepVogue.clients import get_artifact_fs, scheme_of, strip_scheme
 from deepVogue.notifications import slack
 
 log = logging.getLogger(__name__)
@@ -57,17 +57,13 @@ def _validate_pkl(pkl_path: Path) -> None:
         legacy.load_network_pkl(f)  # type: ignore[attr-defined]
 
 
-def _strip_proto(uri: str) -> str:
-    return uri.split("://", 1)[1] if "://" in uri else uri
-
-
 def _align_backend_with_target(target_root: str) -> None:
     """Ensure DV_ARTIFACT_BACKEND matches the target URI scheme.
 
     Without this, a forgotten `export DV_ARTIFACT_BACKEND=gcs` silently routes
     writes to the local fs.
     """
-    scheme = target_root.split("://", 1)[0] if "://" in target_root else "file"
+    scheme = scheme_of(target_root)
     expected = _SCHEME_TO_BACKEND.get(scheme, "file")
     current = os.environ.get("DV_ARTIFACT_BACKEND", "file").lower()
     if current != expected:
@@ -148,7 +144,7 @@ def publish_checkpoint(
 
     _align_backend_with_target(target_root)
     fs = get_artifact_fs()
-    target_path = _strip_proto(target_root).rstrip("/")
+    target_path = strip_scheme(target_root).rstrip("/")
 
     snapshot = find_latest_snapshot(Path(src_dir))
     if validate:

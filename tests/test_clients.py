@@ -1,6 +1,13 @@
 import os
 import pytest
-from deepVogue.clients import artifact_uri, get_artifact_fs, resolve_uri
+from deepVogue.clients import (
+    artifact_uri,
+    get_artifact_fs,
+    resolve_uri,
+    scheme_of,
+    split_uri,
+    strip_scheme,
+)
 
 
 def test_s3_backend_with_minio_endpoint(monkeypatch):
@@ -73,3 +80,47 @@ def test_artifact_uri_file_backend_default(monkeypatch):
     monkeypatch.delenv("DV_ARTIFACT_BACKEND", raising=False)
     assert artifact_uri("deepvogue-datasets") == "deepvogue-datasets"
     assert artifact_uri("deepvogue-datasets", "tarot") == "deepvogue-datasets/tarot"
+
+
+@pytest.mark.parametrize(
+    "uri,expected",
+    [
+        ("gs://bucket/k", "bucket/k"),
+        ("s3://bucket/k", "bucket/k"),
+        ("memory://bucket", "bucket"),
+        ("file:///tmp/x", "/tmp/x"),
+        ("/abs/path", "/abs/path"),
+        ("relative/path", "relative/path"),
+    ],
+)
+def test_strip_scheme(uri, expected):
+    assert strip_scheme(uri) == expected
+
+
+@pytest.mark.parametrize(
+    "uri,expected",
+    [
+        ("gs://bucket/k", "gs"),
+        ("s3://bucket", "s3"),
+        ("memory://bucket", "memory"),
+        ("file:///tmp/x", "file"),
+        ("/abs/path", "file"),
+        ("relative", "file"),
+    ],
+)
+def test_scheme_of(uri, expected):
+    assert scheme_of(uri) == expected
+
+
+@pytest.mark.parametrize(
+    "uri,expected_uri,expected_path",
+    [
+        ("memory://bucket", "memory://bucket", "/bucket"),
+        ("memory://bucket/", "memory://bucket", "/bucket"),
+        ("gs://b/sub/", "gs://b/sub", "/b/sub"),
+        ("/abs/path/", "/abs/path", "/abs/path"),
+        ("/abs/path", "/abs/path", "/abs/path"),
+    ],
+)
+def test_split_uri(uri, expected_uri, expected_path):
+    assert split_uri(uri) == (expected_uri, expected_path)

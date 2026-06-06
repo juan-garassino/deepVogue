@@ -40,6 +40,28 @@ def resolve_uri(uri: str) -> str:
     return f"{root}/{uri}"
 
 
+def strip_scheme(uri: str) -> str:
+    """Return the URI without any ``<scheme>://`` prefix; pass through bare paths."""
+    return uri.split("://", 1)[1] if "://" in uri else uri
+
+
+def scheme_of(uri: str) -> str:
+    """Return the URI scheme, or ``"file"`` for bare/absolute paths."""
+    return uri.split("://", 1)[0] if "://" in uri else "file"
+
+
+def split_uri(uri: str) -> tuple[str, str]:
+    """Normalize a fsspec-style URI and return ``(uri_no_trailing_slash, fs_path)``.
+
+    For ``memory://bucket``, ``fs_path`` is ``/bucket`` (what fsspec's memory
+    filesystem expects). For a plain local path the two values match.
+    """
+    uri = uri.rstrip("/")
+    if "://" in uri:
+        return uri, "/" + strip_scheme(uri)
+    return uri, uri
+
+
 def artifact_uri(bucket: str, *parts: str) -> str:
     """Build an artifact URI honoring DV_ARTIFACT_BACKEND.
 
