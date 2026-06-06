@@ -64,8 +64,22 @@ jobs:
             || echo "package visibility patch skipped (likely already public)"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - if: success()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "✅ build-train pushed ${{ steps.img.outputs.image }}:${{ github.sha }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       - if: failure()
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":x: build-train failed"}' }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ build-train failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

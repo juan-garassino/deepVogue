@@ -32,3 +32,11 @@ jobs:
           payload: '{"text":":x: tests failed on ${{ github.ref }} ${{ github.sha }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Notify Telegram on failure
+        if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ tests failed on ${{ github.ref }} ${{ github.sha }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

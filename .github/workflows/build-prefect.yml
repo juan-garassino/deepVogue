@@ -55,8 +55,22 @@ jobs:
         with: { payload: '{"text":":white_check_mark: prefect server + worker deployed @ ${{ github.sha }}"}' }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: success()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "✅ prefect server + worker deployed @ ${{ github.sha }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       - if: failure()
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":x: prefect build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ prefect build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

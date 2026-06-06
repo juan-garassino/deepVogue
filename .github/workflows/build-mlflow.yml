@@ -47,8 +47,22 @@ jobs:
         with: { payload: '{"text":":white_check_mark: mlflow deployed — ${{ steps.smoke.outputs.url }}"}' }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: success()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "✅ mlflow deployed — ${{ steps.smoke.outputs.url }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       - if: failure()
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":x: mlflow build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ mlflow build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

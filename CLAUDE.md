@@ -137,6 +137,11 @@ On startup `deepVogue/serve/api.py` calls `deepVogue.tracking.iap.start_iap_toke
 
 `infra/gcp/setup-monitoring.sh` (idempotent) provisions uptime checks against `/health` for `deepvogue-{inference,mlflow,prefect-server}` and three alert policies — uptime failure, Cloud Run 5xx > 5%, Cloud SQL CPU > 80% — all attached to a Slack notification channel (webhook-token auth from `SLACK_WEBHOOK_URL`). Triggered by `make deploy-monitoring`, and tail-chained into `make gcp-setup`. Independent of in-app `deepVogue.notifications.slack.*` calls.
 
+**CI Telegram pings.** Every workflow in `.github/workflows/*.yml` now calls the local composite action `.github/actions/notify-telegram/action.yml` alongside its Slack step. The action is a no-op when `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` repo secrets are unset, so forks stay green. To wire it for this repo:
+1. Reuse `DV_TG_TOKEN` from BotFather (or create a fresh bot) — set it as the GitHub repo secret `TELEGRAM_BOT_TOKEN`.
+2. Send any message to the bot from your Telegram account, then `curl https://api.telegram.org/bot<token>/getUpdates | jq '.result[-1].message.chat.id'` to discover your chat id — set it as `TELEGRAM_CHAT_ID`.
+3. Push the branch; the next CI run pings you on success (deploys + train-image build) and on failure (everywhere).
+
 URI helpers consolidated: `deepVogue/clients.py::{strip_scheme, split_uri, scheme_of}` are the canonical home; `publish._strip_proto` and `local._split_uri` are gone.
 
 ## Common Commands

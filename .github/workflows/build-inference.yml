@@ -76,6 +76,15 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
+      - name: Telegram success
+        if: success()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "✅ inference deployed — ${{ steps.smoke.outputs.url }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
       - name: Slack fail
         if: failure()
         uses: slackapi/slack-github-action@v1.27.0
@@ -83,3 +92,12 @@ jobs:
           payload: '{"text":":x: inference build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Telegram fail
+        if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ inference build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
