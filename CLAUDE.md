@@ -93,9 +93,25 @@ New Makefile targets:
 - `make gcp-setup` — runs `infra/gcp/setup.sh` + setup-sql.sh + setup-iam.sh
 - `make deploy-inference` / `deploy-mlflow` / `deploy-prefect` — Cloud Run deploy
 
-Prefect flows live in `deepVogue/orchestration/flows.py`. Each task dispatches via `get_backend(backend)`; v1 supports `backend="local"` (real `prepare`/`publish`, mock `train`/`project`/`walk`/`eval`). `colab` and `runpod` backends are scaffolded but raise `NotImplementedError` in v1 — manual Colab + `make publish` is the v1 training path.
+Prefect flows live in `deepVogue/orchestration/flows.py`. Each task dispatches via `get_backend(backend)`; v1 supports `backend="local"` (real `prepare`/`publish`, mock `train`/`project`/`walk`/`eval`) and `backend="runpod"` (real `train` on a RunPod GPU pod; the rest delegate to `local`). `colab` is scaffolded but raises `NotImplementedError` — manual Colab + `make publish` is the Colab path.
 
 Colab logs to remote MLflow via `deepVogue/tracking/mlflow_helpers.py::log_training_run`. IAP auth: notebook cell sets `MLFLOW_TRACKING_TOKEN` from `gcloud auth print-identity-token --audiences=<iap-oauth-client-id>`.
+
+### RunPod training backend
+
+`backend="runpod"` submits a GPU pod that pulls the dataset from GCS, runs `deepVogue/train.py`, rsync-mirrors snapshots to `DV_RUN_URI`, and publishes the final checkpoint to `DV_PUBLISH_TARGET/models.yaml` — all via the same `publish_checkpoint` path as Colab.
+
+| Env var | Purpose |
+|---|---|
+| `RUNPOD_API_KEY` | Personal API key from runpod.io/console/user/settings |
+| `RUNPOD_IMAGE` | GHCR image, e.g. `ghcr.io/<owner>/deepvogue-train:latest` |
+| `RUNPOD_GPU_TYPE` | GPU SKU (default `NVIDIA H100 80GB HBM3`) |
+| `RUNPOD_VOLUME_GB` | Persistent volume size (default 50) |
+| `DV_DATASET_URI` | `gs://...` dataset.zip URI (read at pod launch, passed through) |
+| `DV_RUN_URI` | `gs://...` prefix for snapshot mirror |
+| `DV_PUBLISH_TARGET` | `gs://...` root holding `models.yaml` |
+
+Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), `make runpod-train MODEL_ID=tarot` submits the job, `make runpod-status POD_ID=...` / `make runpod-stop POD_ID=...` for ops. CI: `.github/workflows/build-train.yml` auto-builds + pushes to GHCR on changes under `infra/docker/train/`, `deepVogue/`, or `requirements*.txt`.
 
 ## Common Commands
 

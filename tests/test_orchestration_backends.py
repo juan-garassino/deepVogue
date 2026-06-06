@@ -21,12 +21,10 @@ def test_colab_backend_raises_notimplemented_in_v1():
         )
 
 
-def test_runpod_backend_raises_notimplemented_in_v1():
+def test_runpod_backend_has_required_ops():
     b = get_backend("runpod")
-    with pytest.raises(NotImplementedError):
-        b.train(
-            dataset_name="x", cfg="stylegan3-t", kimg=10, gamma=2.0, batch=32, res=64
-        )
+    for op in ("prepare", "train", "publish", "project", "walk", "eval"):
+        assert hasattr(b, op), f"runpod backend missing op: {op}"
 
 
 import os

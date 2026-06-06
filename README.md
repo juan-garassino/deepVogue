@@ -111,6 +111,28 @@ make nano-down
 
 Endpoints: MLflow http://localhost:5000 · Prefect http://localhost:4200 · FastAPI http://localhost:8080 · MinIO http://localhost:9001
 
+## RunPod training
+
+For GPU training without Colab, submit a pod that pulls the dataset from GCS, trains, mirrors snapshots, and publishes via the same `models.yaml`:
+
+```bash
+# 1. build + push the train image to GHCR (or rely on the build-train workflow)
+make runpod-push                    # tags ghcr.io/<owner>/deepvogue-train:latest
+
+# 2. set env (RUNPOD_API_KEY, RUNPOD_IMAGE, DV_DATASET_URI=gs://..., DV_RUN_URI=gs://...,
+#    DV_PUBLISH_TARGET=gs://deepvogue-models, MLFLOW_TRACKING_URI=...)
+cp infra/.env.example infra/.env && $EDITOR infra/.env && set -a && . infra/.env && set +a
+
+# 3. submit
+make runpod-train MODEL_ID=tarot DV_KIMG=5000 DV_GAMMA=2 DV_BATCH=32 DV_RES=512
+
+# Ops
+make runpod-status POD_ID=<id>
+make runpod-stop   POD_ID=<id>
+```
+
+The pod runs `infra/docker/train/entrypoint.sh`: `gsutil cp` dataset → background `gsutil rsync` of run dir → `deepVogue/train.py` → `python -m deepVogue.publish`. Failures are routed to Slack if `SLACK_WEBHOOK_URL` is set.
+
 ## GCP deployment
 
 ```bash

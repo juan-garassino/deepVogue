@@ -2,27 +2,45 @@ name: build-train
 
 on:
   workflow_dispatch:
+  push:
+    branches: [mlops/v1, master]
+    paths:
+      - 'infra/docker/train/**'
+      - 'deepVogue/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - '.github/workflows/build-train.yml'
 
 permissions:
   contents: read
-  id-token: write
+  packages: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/train
+      IMAGE: ghcr.io/${{ github.repository_owner }}/deepvogue-train
     steps:
       - uses: actions/checkout@v4
-      - id: auth
-        uses: google-github-actions/auth@v2
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-      - run: docker build -f infra/docker/train/Dockerfile -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-      - run: docker push $IMAGE:${{ github.sha }} && docker push $IMAGE:latest
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lowercase image name
+        id: img
+        run: echo "image=$(echo $IMAGE | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/train/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.img.outputs.image }}:${{ github.sha }}
+            ${{ steps.img.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - if: failure()
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":x: build-train failed"}' }
