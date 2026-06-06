@@ -19,7 +19,7 @@ spec:
                   memory: 2Gi
               env:
                 - name: PREFECT_API_URL
-                  value: https://deepvogue-prefect-server-PROJECT_HASH-uc.a.run.app/api
+                  value: PREFECT_SERVER_URL/api
                 - name: DV_ARTIFACT_BACKEND
                   value: gcs
               command: ["sh", "-c", "prefect worker start --pool default-process-pool --type process"]

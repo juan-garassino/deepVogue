@@ -1,14 +1,21 @@
-"""RunPod backend — submits a Pod, waits for it to finish, returns artifact URIs.
+"""RunPod backend — submits a Pod, waits for it to self-terminate, returns artifact URIs.
 
 Only ``train`` is GPU-bound and runs on RunPod. The other ops delegate to the
 local backend; doing so keeps prepare/publish/project/walk/eval cheap and lets
 the train pod's published checkpoint flow back through the same registry.
+
+Lifecycle: the pod's entrypoint calls RunPod's GraphQL ``podTerminate`` on exit
+(success or failure). The orchestrator polls ``get_pod`` and treats either a
+``TERMINATED`` status or a None/missing pod as success. As a guard we call
+``terminate_pod`` ourselves at the end — idempotent if the pod is already gone.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import sys
 import time
 from typing import Any
 
@@ -17,8 +24,8 @@ from deepVogue.notifications import slack
 log = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 30
-TERMINAL_STATUSES = {"EXITED", "TERMINATED", "FAILED"}
-SUCCESS_STATUSES = {"EXITED"}
+SUCCESS_STATUSES = {"TERMINATED", "EXITED"}
+FAILURE_STATUSES = {"FAILED", "DEAD"}
 
 
 def _require_env(name: str) -> str:
@@ -49,10 +56,13 @@ def _build_env(
         "DV_GAMMA": str(gamma),
         "DV_BATCH": str(batch),
         "DV_RES": str(res),
+        "RUNPOD_API_KEY": _require_env("RUNPOD_API_KEY"),
+        "GOOGLE_APPLICATION_CREDENTIALS_JSON": _require_env(
+            "GOOGLE_APPLICATION_CREDENTIALS_JSON"
+        ),
     }
     if resume_from:
         env["DV_RESUME_FROM"] = resume_from
-    # Pass through Mlflow + publish target + Slack so the pod can log + register.
     for k in (
         "MLFLOW_TRACKING_URI",
         "DV_PUBLISH_TARGET",
@@ -60,7 +70,6 @@ def _build_env(
         "DV_MODELS_ROOT",
         "DV_MODELS_YAML",
         "SLACK_WEBHOOK_URL",
-        "GOOGLE_APPLICATION_CREDENTIALS_JSON",
     ):
         v = os.environ.get(k)
         if v:
@@ -70,12 +79,13 @@ def _build_env(
 
 def _submit(env: dict[str, str], name: str) -> str:
     """Create a RunPod GPU pod, return its id."""
-    import runpod  # imported lazily; SDK only required when backend is used
+    import runpod
 
     runpod.api_key = _require_env("RUNPOD_API_KEY")
     image = _require_env("RUNPOD_IMAGE")
     gpu_type = os.environ.get("RUNPOD_GPU_TYPE", "NVIDIA H100 80GB HBM3")
-    volume_gb = int(os.environ.get("RUNPOD_VOLUME_GB", "50"))
+    volume_gb = int(os.environ.get("RUNPOD_VOLUME_GB", "0"))
+    container_disk_gb = int(os.environ.get("RUNPOD_CONTAINER_DISK_GB", "100"))
 
     pod = runpod.create_pod(
         name=name,
@@ -83,7 +93,7 @@ def _submit(env: dict[str, str], name: str) -> str:
         gpu_type_id=gpu_type,
         gpu_count=1,
         volume_in_gb=volume_gb,
-        container_disk_in_gb=20,
+        container_disk_in_gb=container_disk_gb,
         env=env,
         cloud_type="SECURE",
     )
@@ -92,17 +102,42 @@ def _submit(env: dict[str, str], name: str) -> str:
     return pod_id
 
 
-def _wait(pod_id: str) -> dict[str, Any]:
-    """Block until pod reaches a terminal status; return final pod dict."""
+def _wait(pod_id: str, max_seconds: float) -> tuple[str, dict[str, Any] | None]:
+    """Block until pod reaches a terminal state or max_seconds elapses.
+
+    Returns ``(status, final_info)``. ``status`` is one of:
+      - "TERMINATED" / "EXITED" — clean self-terminate by the entrypoint
+      - "FAILED" / "DEAD"       — RunPod reported a failure status
+      - "GONE"                  — get_pod returned None (pod removed)
+      - "TIMEOUT"               — exceeded max_seconds
+    """
     import runpod
 
+    deadline = time.time() + max_seconds
     while True:
         info = runpod.get_pod(pod_id)
-        status = (info or {}).get("desiredStatus") or (info or {}).get("status") or ""
+        if info is None:
+            return "GONE", None
+        status = (info.get("desiredStatus") or info.get("status") or "").upper()
         log.info("runpod: pod %s status=%s", pod_id, status)
-        if status.upper() in TERMINAL_STATUSES:
-            return info or {}
+        if status in SUCCESS_STATUSES:
+            return status, info
+        if status in FAILURE_STATUSES:
+            return status, info
+        if time.time() >= deadline:
+            return "TIMEOUT", info
         time.sleep(POLL_INTERVAL_SECONDS)
+
+
+def _terminate_quiet(pod_id: str) -> None:
+    """Idempotent terminate; logs but doesn't raise on failure."""
+    try:
+        import runpod
+
+        runpod.terminate_pod(pod_id)
+        log.info("runpod: terminated pod %s", pod_id)
+    except Exception as e:
+        log.warning("runpod: terminate_pod %s failed: %s", pod_id, e)
 
 
 def train(
@@ -119,13 +154,17 @@ def train(
 ) -> dict[str, Any]:
     """Submit a RunPod training job and return the published checkpoint URI.
 
-    Reads dataset location from ``DV_DATASET_URI`` (gs://...) if ``target_uri``
-    isn't a gs:// URI — train inputs and run outputs always live on GCS for the
-    RunPod backend.
+    Required env (launcher side):
+      RUNPOD_API_KEY, RUNPOD_IMAGE, DV_DATASET_URI, DV_RUN_URI (or target_uri),
+      DV_PUBLISH_TARGET, GOOGLE_APPLICATION_CREDENTIALS_JSON
+    Optional:
+      RUNPOD_GPU_TYPE, RUNPOD_VOLUME_GB, RUNPOD_CONTAINER_DISK_GB,
+      RUNPOD_MAX_TRAIN_HOURS (default 24), DV_MODEL_ID, DV_RESUME_FROM
     """
     dataset_uri = os.environ.get("DV_DATASET_URI") or _require_env("DV_DATASET_URI")
     run_uri = target_uri or os.environ.get("DV_RUN_URI") or _require_env("DV_RUN_URI")
     model_id = os.environ.get("DV_MODEL_ID", dataset_name)
+    max_hours = float(os.environ.get("RUNPOD_MAX_TRAIN_HOURS", "24"))
 
     env = _build_env(
         dataset_uri=dataset_uri,
@@ -141,30 +180,46 @@ def train(
 
     pod_name = f"dv-{model_id}-{int(time.time())}"
     pod_id = _submit(env, pod_name)
+
+    # Surface pod_id immediately so a Ctrl-C'd launcher can recover it.
+    sys.stdout.write(json.dumps({"event": "submitted", "pod_id": pod_id}) + "\n")
+    sys.stdout.flush()
     slack.notify_event(
         "runpod",
         "info",
         f"pod {pod_id} submitted for {model_id}",
-        {"image": env.get("RUNPOD_IMAGE", "")},
+        {"image": os.environ.get("RUNPOD_IMAGE", ""), "max_hours": str(max_hours)},
     )
 
-    final = _wait(pod_id)
-    status = (final.get("desiredStatus") or final.get("status") or "").upper()
+    start = time.time()
+    status, _info = _wait(pod_id, max_hours * 3600)
+    elapsed = int(time.time() - start)
 
-    # Best-effort: stop the pod so it stops billing.
-    try:
-        import runpod
-
-        runpod.stop_pod(pod_id)
-    except Exception as e:
-        log.warning("runpod: stop_pod %s failed: %s", pod_id, e)
-
-    if status not in SUCCESS_STATUSES:
-        slack.notify_failure("runpod", f"pod {pod_id} finished with status={status}")
-        raise RuntimeError(f"runpod pod {pod_id} failed (status={status})")
+    # Guard terminate (idempotent; cheap if pod is gone).
+    _terminate_quiet(pod_id)
 
     pkl_uri = f"{run_uri.rstrip('/')}/network-snapshot-{kimg:06d}.pkl"
-    return {"pkl": pkl_uri, "kimg": kimg, "pod_id": pod_id, "fid": None}
+
+    if status in SUCCESS_STATUSES or status == "GONE":
+        slack.notify_success(
+            "runpod",
+            f"pod {pod_id} done ({status}) for {model_id}",
+            {"pkl": pkl_uri, "kimg": str(kimg), "elapsed_s": str(elapsed)},
+        )
+        return {
+            "pkl": pkl_uri,
+            "kimg": kimg,
+            "pod_id": pod_id,
+            "fid": None,
+            "elapsed_s": elapsed,
+        }
+
+    slack.notify_failure(
+        "runpod",
+        f"pod {pod_id} {status.lower()} for {model_id}",
+        {"elapsed_s": str(elapsed), "max_hours": str(max_hours)},
+    )
+    raise RuntimeError(f"runpod pod {pod_id} ended with status={status}")
 
 
 # ----- delegate non-GPU ops to the local backend -----

@@ -5,7 +5,7 @@ GH_REPO="${GITHUB_REPO:?owner/repo}"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 
 # Runtime SAs
-for sa in mlflow-server prefect-server prefect-worker fastapi-inference deepvogue-deployer; do
+for sa in mlflow-server prefect-server prefect-worker fastapi-inference deepvogue-deployer deepvogue-trainer; do
   if ! gcloud --project "$PROJECT" iam service-accounts describe \
        "${sa}-sa@${PROJECT}.iam.gserviceaccount.com" >/dev/null 2>&1; then
     gcloud --project "$PROJECT" iam service-accounts create "${sa}-sa" \
@@ -24,6 +24,7 @@ grant "prefect-server-sa@${PROJECT}.iam.gserviceaccount.com" roles/cloudsql.clie
 grant "prefect-worker-sa@${PROJECT}.iam.gserviceaccount.com" roles/storage.objectAdmin
 grant "prefect-worker-sa@${PROJECT}.iam.gserviceaccount.com" roles/cloudsql.client
 grant "fastapi-inference-sa@${PROJECT}.iam.gserviceaccount.com" roles/storage.objectViewer
+grant "deepvogue-trainer-sa@${PROJECT}.iam.gserviceaccount.com" roles/storage.objectAdmin
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/artifactregistry.writer
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/run.admin
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/iam.serviceAccountUser
@@ -56,3 +57,8 @@ echo "Add these as GitHub repo secrets:"
 echo "  GCP_PROJECT=${PROJECT}"
 echo "  GCP_WIF_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/providers/${PROVIDER}"
 echo "  GCP_DEPLOYER_SA=deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com"
+echo
+echo "To mint a JSON key for the RunPod trainer SA:"
+echo "  gcloud iam service-accounts keys create trainer-key.json \\"
+echo "    --iam-account=deepvogue-trainer-sa@${PROJECT}.iam.gserviceaccount.com"
+echo "Then set on the launcher: export GOOGLE_APPLICATION_CREDENTIALS_JSON=\"\$(cat trainer-key.json)\""

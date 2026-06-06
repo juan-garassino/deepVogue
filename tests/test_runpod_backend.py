@@ -20,9 +20,10 @@ def fake_runpod(monkeypatch):
     mod.api_key = None
     mod.create_pod = MagicMock(return_value={"id": "pod-abc123"})
     mod.get_pod = MagicMock(
-        return_value={"id": "pod-abc123", "desiredStatus": "EXITED"}
+        return_value={"id": "pod-abc123", "desiredStatus": "TERMINATED"}
     )
     mod.stop_pod = MagicMock(return_value=None)
+    mod.terminate_pod = MagicMock(return_value=None)
     monkeypatch.setitem(sys.modules, "runpod", mod)
     return mod
 
@@ -35,13 +36,20 @@ def env(monkeypatch):
     monkeypatch.setenv("DV_RUN_URI", "gs://deepvogue-runs/tarot/2026-06-06")
     monkeypatch.setenv("DV_PUBLISH_TARGET", "gs://deepvogue-models")
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "https://mlflow.example.com")
+    monkeypatch.setenv(
+        "GOOGLE_APPLICATION_CREDENTIALS_JSON", '{"type":"service_account"}'
+    )
     return monkeypatch
 
 
-def test_train_submits_pod_with_expected_env(fake_runpod, env, monkeypatch):
+def _fast_poll(monkeypatch):
     monkeypatch.setattr(
         "deepVogue.orchestration.backends.runpod.POLL_INTERVAL_SECONDS", 0
     )
+
+
+def test_train_submits_pod_with_expected_env(fake_runpod, env, monkeypatch):
+    _fast_poll(monkeypatch)
     from deepVogue.orchestration.backends import runpod as backend
 
     out = backend.train(
@@ -68,23 +76,42 @@ def test_train_submits_pod_with_expected_env(fake_runpod, env, monkeypatch):
     assert env_passed["DV_RES"] == "256"
     assert env_passed["MLFLOW_TRACKING_URI"] == "https://mlflow.example.com"
     assert env_passed["DV_PUBLISH_TARGET"] == "gs://deepvogue-models"
+    # The pod needs both the SA JSON and an API key to self-terminate.
+    assert env_passed["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+    assert env_passed["RUNPOD_API_KEY"] == "rp-test-key"
 
     assert out["pod_id"] == "pod-abc123"
     assert out["kimg"] == 200
     assert out["pkl"].endswith("network-snapshot-000200.pkl")
     assert out["pkl"].startswith("gs://deepvogue-runs/tarot/2026-06-06")
+    assert "elapsed_s" in out
 
-    fake_runpod.stop_pod.assert_called_once_with("pod-abc123")
+    # Guard terminate is best-effort; runs regardless of lifecycle path.
+    fake_runpod.terminate_pod.assert_called_once_with("pod-abc123")
+
+
+def test_train_treats_gone_pod_as_success(fake_runpod, env, monkeypatch):
+    _fast_poll(monkeypatch)
+    fake_runpod.get_pod.return_value = None
+    from deepVogue.orchestration.backends import runpod as backend
+
+    out = backend.train(
+        dataset_name="tarot",
+        cfg="stylegan3-t",
+        kimg=10,
+        gamma=2.0,
+        batch=32,
+        res=64,
+    )
+    assert out["pod_id"] == "pod-abc123"
 
 
 def test_train_raises_when_pod_fails(fake_runpod, env, monkeypatch):
-    monkeypatch.setattr(
-        "deepVogue.orchestration.backends.runpod.POLL_INTERVAL_SECONDS", 0
-    )
+    _fast_poll(monkeypatch)
     fake_runpod.get_pod.return_value = {"id": "pod-abc123", "desiredStatus": "FAILED"}
     from deepVogue.orchestration.backends import runpod as backend
 
-    with pytest.raises(RuntimeError, match="failed"):
+    with pytest.raises(RuntimeError, match="FAILED"):
         backend.train(
             dataset_name="tarot",
             cfg="stylegan3-t",
@@ -93,12 +120,30 @@ def test_train_raises_when_pod_fails(fake_runpod, env, monkeypatch):
             batch=32,
             res=64,
         )
+    # Even on failure, we still try to terminate to stop billing.
+    fake_runpod.terminate_pod.assert_called_once_with("pod-abc123")
+
+
+def test_train_timeout_raises_and_terminates(fake_runpod, env, monkeypatch):
+    _fast_poll(monkeypatch)
+    monkeypatch.setenv("RUNPOD_MAX_TRAIN_HOURS", "0")  # immediate timeout
+    fake_runpod.get_pod.return_value = {"id": "pod-abc123", "desiredStatus": "RUNNING"}
+    from deepVogue.orchestration.backends import runpod as backend
+
+    with pytest.raises(RuntimeError, match="TIMEOUT"):
+        backend.train(
+            dataset_name="tarot",
+            cfg="stylegan3-t",
+            kimg=10,
+            gamma=2.0,
+            batch=32,
+            res=64,
+        )
+    fake_runpod.terminate_pod.assert_called_once_with("pod-abc123")
 
 
 def test_train_resume_passes_resume_uri(fake_runpod, env, monkeypatch):
-    monkeypatch.setattr(
-        "deepVogue.orchestration.backends.runpod.POLL_INTERVAL_SECONDS", 0
-    )
+    _fast_poll(monkeypatch)
     from deepVogue.orchestration.backends import runpod as backend
 
     backend.train(
@@ -132,6 +177,16 @@ def test_train_requires_dataset_uri(fake_runpod, env, monkeypatch):
     from deepVogue.orchestration.backends import runpod as backend
 
     with pytest.raises(RuntimeError, match="DV_DATASET_URI"):
+        backend.train(
+            dataset_name="x", cfg="stylegan3-t", kimg=10, gamma=2.0, batch=32, res=64
+        )
+
+
+def test_train_requires_sa_json(fake_runpod, env, monkeypatch):
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", raising=False)
+    from deepVogue.orchestration.backends import runpod as backend
+
+    with pytest.raises(RuntimeError, match="GOOGLE_APPLICATION_CREDENTIALS_JSON"):
         backend.train(
             dataset_name="x", cfg="stylegan3-t", kimg=10, gamma=2.0, batch=32, res=64
         )

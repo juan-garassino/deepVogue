@@ -348,7 +348,11 @@ deploy-mlflow:
 deploy-prefect:
 	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/prefect-server.service.yaml | \
 	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
-	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/prefect-worker.job.yaml | \
+	@SERVER_URL=$$(gcloud --project=$(GCP_PROJECT) run services describe deepvogue-prefect-server \
+	  --region=$(GCP_REGION) --format='value(status.url)'); \
+	test -n "$$SERVER_URL" || (echo "could not resolve prefect-server URL" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|PREFECT_SERVER_URL|$$SERVER_URL|g" \
+	  infra/cloudrun/prefect-worker.job.yaml | \
 	  gcloud --project=$(GCP_PROJECT) run jobs replace - --region=$(GCP_REGION)
 
 gcp-setup:
@@ -357,7 +361,7 @@ gcp-setup:
 	bash infra/gcp/setup-iam.sh
 
 # === RunPod training backend ===
-.PHONY: runpod-build runpod-push runpod-train runpod-status runpod-stop
+.PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop
 
 RUNPOD_IMAGE ?= ghcr.io/$(shell git config --get remote.origin.url | sed -E 's#.*[:/]([^/]+/[^/.]+)(\.git)?#\1#' | tr '[:upper:]' '[:lower:]')-train
 RUNPOD_TAG ?= latest
@@ -368,25 +372,25 @@ runpod-build: ## Build the GPU train image locally
 runpod-push: runpod-build ## Push the train image to GHCR
 	docker push $(RUNPOD_IMAGE):$(RUNPOD_TAG)
 
-runpod-train: ## Submit a RunPod training job (requires DV_DATASET_URI, DV_RUN_URI, MODEL_ID)
+runpod-train: ## Submit a RunPod training job (env: DV_DATASET_URI, DV_RUN_URI, GOOGLE_APPLICATION_CREDENTIALS_JSON)
 	@test -n "$(MODEL_ID)" || (echo "usage: make runpod-train MODEL_ID=<id> DV_DATASET_URI=gs://... DV_RUN_URI=gs://..." && exit 1)
-	@test -n "$$DV_DATASET_URI" || (echo "set DV_DATASET_URI=gs://..." && exit 1)
-	@test -n "$$DV_RUN_URI" || (echo "set DV_RUN_URI=gs://..." && exit 1)
-	DV_MODEL_ID=$(MODEL_ID) python -c "from deepVogue.orchestration.flows import train_flow; \
-import os; \
-print(train_flow(backend='runpod', \
-  dataset_name='$(MODEL_ID)', \
-  cfg=os.environ.get('DV_CFG','stylegan3-t'), \
-  kimg=int(os.environ.get('DV_KIMG','5000')), \
-  gamma=float(os.environ.get('DV_GAMMA','2')), \
-  batch=int(os.environ.get('DV_BATCH','32')), \
-  res=int(os.environ.get('DV_RES','256')), \
-  target_uri=os.environ['DV_RUN_URI']))"
+	DV_MODEL_ID=$(MODEL_ID) python scripts/submit_runpod_train.py --model-id=$(MODEL_ID)
 
 runpod-status: ## Print status of a pod: make runpod-status POD_ID=<id>
 	@test -n "$(POD_ID)" || (echo "usage: make runpod-status POD_ID=<id>" && exit 1)
 	python -c "import runpod, os, json; runpod.api_key=os.environ['RUNPOD_API_KEY']; print(json.dumps(runpod.get_pod('$(POD_ID)'), indent=2))"
 
-runpod-stop: ## Stop a running pod: make runpod-stop POD_ID=<id>
+runpod-logs: ## Dump current logs of a pod: make runpod-logs POD_ID=<id>
+	@test -n "$(POD_ID)" || (echo "usage: make runpod-logs POD_ID=<id>" && exit 1)
+	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; \
+import sys; \
+fn = getattr(runpod, 'get_pod_logs', None); \
+sys.stdout.write(fn('$(POD_ID)') if fn else 'SDK lacks get_pod_logs; check https://www.runpod.io/console/pods')"
+
+runpod-terminate: ## Terminate (delete) a pod: make runpod-terminate POD_ID=<id>
+	@test -n "$(POD_ID)" || (echo "usage: make runpod-terminate POD_ID=<id>" && exit 1)
+	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; runpod.terminate_pod('$(POD_ID)'); print('terminated $(POD_ID)')"
+
+runpod-stop: ## Pause a pod (still bills volume): make runpod-stop POD_ID=<id>
 	@test -n "$(POD_ID)" || (echo "usage: make runpod-stop POD_ID=<id>" && exit 1)
 	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; runpod.stop_pod('$(POD_ID)'); print('stopped $(POD_ID)')"

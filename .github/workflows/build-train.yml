@@ -36,11 +36,34 @@ jobs:
           context: .
           file: infra/docker/train/Dockerfile
           push: true
+          load: false
           tags: |
             ${{ steps.img.outputs.image }}:${{ github.sha }}
             ${{ steps.img.outputs.image }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Smoke (DV_FAKE_TRAIN=1; no GPU required)
+        run: |
+          docker pull ${{ steps.img.outputs.image }}:${{ github.sha }}
+          docker run --rm \
+            -e DV_FAKE_TRAIN=1 \
+            -e DV_KIMG=10 \
+            ${{ steps.img.outputs.image }}:${{ github.sha }} \
+            > smoke.log 2>&1 || (cat smoke.log; exit 1)
+          grep -q "fake-train done" smoke.log || (cat smoke.log; exit 1)
+          cat smoke.log
+      - name: Make package public (best-effort)
+        # No-op if already public; tolerates user-vs-org account difference.
+        run: |
+          gh api -X PATCH \
+            "/user/packages/container/deepvogue-train/visibility" \
+            -f visibility=public 2>/dev/null \
+            || gh api -X PATCH \
+              "/orgs/${{ github.repository_owner }}/packages/container/deepvogue-train/visibility" \
+              -f visibility=public 2>/dev/null \
+            || echo "package visibility patch skipped (likely already public)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: failure()
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":x: build-train failed"}' }

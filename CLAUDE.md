@@ -101,17 +101,29 @@ Colab logs to remote MLflow via `deepVogue/tracking/mlflow_helpers.py::log_train
 
 `backend="runpod"` submits a GPU pod that pulls the dataset from GCS, runs `deepVogue/train.py`, rsync-mirrors snapshots to `DV_RUN_URI`, and publishes the final checkpoint to `DV_PUBLISH_TARGET/models.yaml` — all via the same `publish_checkpoint` path as Colab.
 
-| Env var | Purpose |
+**Auth setup (one-time):**
+- `RUNPOD_API_KEY` from runpod.io/console/user/settings
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON=$(cat trainer-key.json)` minted by `gcloud iam service-accounts keys create trainer-key.json --iam-account=deepvogue-trainer-sa@$GCP_PROJECT.iam.gserviceaccount.com` (the SA is created by `make gcp-setup`)
+- GHCR `deepvogue-train` package made public on first build (CI does this; private alternative is `runpod.create_container_registry_auth` → `create_template`)
+
+**Pod lifecycle:** the pod's entrypoint calls RunPod's GraphQL `podTerminate` on exit (success or failure). The orchestrator polls `get_pod` and treats `TERMINATED` / `EXITED` / pod-gone as success, `FAILED` / `DEAD` as failure, and force-terminates on `RUNPOD_MAX_TRAIN_HOURS` timeout. Final guard `terminate_pod` is idempotent.
+
+| Env var (launcher side) | Purpose |
 |---|---|
-| `RUNPOD_API_KEY` | Personal API key from runpod.io/console/user/settings |
+| `RUNPOD_API_KEY` | Auth |
 | `RUNPOD_IMAGE` | GHCR image, e.g. `ghcr.io/<owner>/deepvogue-train:latest` |
 | `RUNPOD_GPU_TYPE` | GPU SKU (default `NVIDIA H100 80GB HBM3`) |
-| `RUNPOD_VOLUME_GB` | Persistent volume size (default 50) |
-| `DV_DATASET_URI` | `gs://...` dataset.zip URI (read at pod launch, passed through) |
-| `DV_RUN_URI` | `gs://...` prefix for snapshot mirror |
+| `RUNPOD_VOLUME_GB` | Persistent volume (default 0 — outputs mirror to GCS) |
+| `RUNPOD_CONTAINER_DISK_GB` | Ephemeral disk (default 100) |
+| `RUNPOD_MAX_TRAIN_HOURS` | Hard timeout; force-terminate past this (default 24) |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Full SA JSON; activated on pod startup |
+| `DV_DATASET_URI` | `gs://...` dataset.zip URI |
+| `DV_RUN_URI` | `gs://...` snapshot mirror prefix |
 | `DV_PUBLISH_TARGET` | `gs://...` root holding `models.yaml` |
 
-Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), `make runpod-train MODEL_ID=tarot` submits the job, `make runpod-status POD_ID=...` / `make runpod-stop POD_ID=...` for ops. CI: `.github/workflows/build-train.yml` auto-builds + pushes to GHCR on changes under `infra/docker/train/`, `deepVogue/`, or `requirements*.txt`.
+Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), `make runpod-train MODEL_ID=tarot` calls `scripts/submit_runpod_train.py` (emits JSON events to stdout), `make runpod-status POD_ID=...` / `make runpod-logs POD_ID=...` / `make runpod-terminate POD_ID=...` for ops. CI: `.github/workflows/build-train.yml` auto-builds, pushes to GHCR, makes the package public, and runs a `DV_FAKE_TRAIN=1` smoke that exercises the entrypoint without a GPU.
+
+Per-tick MLflow logging from the pod is **deferred to v2** (IAP id-token broker needed from non-GCP infra); v1 captures the final FID in `models.yaml` via `publish`.
 
 ## Common Commands
 
