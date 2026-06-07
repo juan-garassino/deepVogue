@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **GCP migration note (2026-06-07):** Cloud target: **`garassino-ml`** / `europe-west1`. Deploy infra lives in the sibling repo `006-deep-projects/deepVogue-mlops/` (Cloud Run YAMLs + GitHub build workflows, already retargeted). This repo holds research/training code; the MLOps sibling holds the deploy stack. See workspace root `CLAUDE.md` § "GCP architecture".
+
 ## Project Overview
 
 **deepVogue** is a **StyleGAN3-t base** (NVIDIA's `stylegan3`) with the latent-cinema features from the SG2-ADA / Schultz lineage ported on top — used as the engine for a data-driven generative-art / latent-cinema project.
