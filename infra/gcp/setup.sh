@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Idempotent GCP bootstrap for deepVogue MLOps stack.
-# Required env: GCP_PROJECT, GCP_REGION (default us-central1), GITHUB_REPO (owner/repo)
+# Required env: GCP_PROJECT, GCP_REGION (default europe-west1), GITHUB_REPO (owner/repo)
 # shellcheck source=_common.sh
 source "$(dirname "$0")/_common.sh"
 GH_REPO="${GITHUB_REPO:?set GITHUB_REPO=owner/repo}"

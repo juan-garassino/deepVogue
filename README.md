@@ -140,15 +140,24 @@ make runpod-terminate POD_ID=<id>
 
 The pod runs `infra/docker/train/entrypoint.sh`: gcloud SA activation → GPU + custom-ops warmup → `gsutil cp` dataset → background `gsutil rsync` of run dir → `deepVogue/train.py` → `python -m deepVogue.publish` → self-terminate via RunPod GraphQL. Failures route to Slack if `SLACK_WEBHOOK_URL` is set.
 
-## GCP deployment
+## GCP show-and-destroy
+
+Prerequisites: `garassino-op` is already bootstrapped (owns the `github-pool` WIF + Secret Manager). This stack lives in `garassino-ml` and federates from `op`.
 
 ```bash
-export GCP_PROJECT=your-project GITHUB_REPO=owner/deepvogue
-make gcp-setup                      # APIs, buckets, AR repo, Cloud SQL, runtime SAs, WIF
-make deploy-mlflow deploy-prefect deploy-inference
+export GCP_PROJECT=garassino-ml GITHUB_REPO=owner/deepvogue
+make gcp-setup                      # APIs, buckets, AR repo, Cloud SQL, runtime SAs,
+                                    # cross-project WIF binding, monitoring, €25 budget
+
+# Demo cycle
+make show                           # builds + deploys mlflow, prefect, inference, monitoring
+# … run the demo …
+make destroy                        # tears down runtime; preserves data + images + IAM
 ```
 
-After the first GCP deployment, register your Workload Identity Federation outputs (printed at the end of `setup-iam.sh`) as GitHub repo secrets: `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`, `SLACK_WEBHOOK_URL`.
+`make show` prints the live Cloud Run URLs. `make destroy` stops Cloud SQL via `--activation-policy=NEVER` (free, data preserved); re-running `make show` restarts it. Buckets, Artifact Registry images, IAM bindings, and service accounts are *never* deleted by `destroy`.
+
+After the first `make gcp-setup`, register the outputs printed by `setup-iam.sh` as GitHub repo secrets: `GCP_PROJECT`, `GCP_WIF_PROVIDER` (points at `garassino-op`'s pool), `GCP_DEPLOYER_SA`, `SLACK_WEBHOOK_URL`, plus `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` if you want CI pings.
 
 ## Monitoring
 

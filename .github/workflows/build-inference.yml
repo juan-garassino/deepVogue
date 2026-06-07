@@ -19,8 +19,8 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     env:
-      REGION: us-central1
-      IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/inference
+      REGION: europe-west1
+      IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/inference
     steps:
       - uses: actions/checkout@v4
 
@@ -40,7 +40,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Configure docker for AR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 
       - name: Build image
         run: docker build -f infra/docker/inference/Dockerfile -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .

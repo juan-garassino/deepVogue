@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **GCP migration note (2026-06-07):** Cloud Run service YAMLs (`infra/cloudrun/*.yaml`) and build workflows (`.github/workflows/build-*.yml`) target `europe-west1-docker.pkg.dev`. The `PROJECT_ID` / `secrets.GCP_PROJECT` placeholder must resolve to **`garassino-ml`** at deploy time. See workspace root `CLAUDE.md` § "GCP architecture" for the canonical layout.
+>
+> - **Show-and-destroy:** `make show` brings the stack up (~1 min) — deploys mlflow, prefect (server + worker), inference, monitoring. `make destroy` tears down runtime (services + jobs + Cloud SQL → `activation-policy=NEVER`); buckets, AR images, IAM, and SAs are preserved. Cloud SQL is stopped, not deleted, so data survives a destroy/show cycle.
+> - **WIF:** `garassino-op` owns the canonical `github-pool` / `github-provider`. `infra/gcp/setup-iam.sh` only adds a *cross-project binding* on this project's `deepvogue-deployer-sa` so CI in this repo can impersonate it — no in-project pool created. `setup-iam.sh` errors with a clear message if `garassino-op` isn't bootstrapped yet (`GCP_OP_PROJECT` override available).
+> - **SA JSON keys:** none, except the `deepvogue-trainer-sa` key consumed by RunPod. External compute can't use WIF directly; this is the one documented deviation from the workspace-wide "no SA JSON keys anywhere" rule.
+> - **Budget:** `make deploy-budget` (or chained via `make gcp-setup`) upserts a €25/mo budget on the project via `infra/gcp/setup-budget.sh`, with 40/80/100% alert thresholds. Email recipient is wired once in the console (`DV_BUDGET_EMAIL` default `juan.garassino@hotmail.com`).
+> - **Cloud SQL:** still used for MLflow + Prefect backends (`db-f1-micro` in `europe-west1`). Acceptable under show-and-destroy. Migrating to Neon free tier is a deferred decision, tracked as a backlog item.
+
 ## Project Overview
 
 **deepVogue** is a **StyleGAN3-t base** (NVIDIA's `stylegan3`) with the latent-cinema features from the SG2-ADA / Schultz lineage ported on top — used as the engine for a data-driven generative-art / latent-cinema project.

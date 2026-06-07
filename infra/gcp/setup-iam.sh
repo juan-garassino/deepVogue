@@ -30,35 +30,33 @@ grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/run.admin
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/iam.serviceAccountUser
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/cloudsql.client
 
-# WIF pool + provider for GitHub Actions
+# Cross-project WIF: garassino-op owns the github-pool / github-provider.
+# This script only adds a binding so the deployer SA in $PROJECT (garassino-ml)
+# can be impersonated by GitHub Actions in the repo named $GH_REPO.
+step "Cross-project WIF binding from $OP_PROJECT"
+OP_NUMBER=$(resolve_op_number)
+if [ -z "$OP_NUMBER" ]; then
+  echo "ERROR: cannot resolve $OP_PROJECT — make sure garassino-op is bootstrapped first" >&2
+  exit 1
+fi
 POOL="github-pool"
 PROVIDER="github-provider"
-if ! gcloud --project "$PROJECT" iam workload-identity-pools describe "$POOL" \
-     --location=global >/dev/null 2>&1; then
-  gcloud --project "$PROJECT" iam workload-identity-pools create "$POOL" --location=global
-fi
-if ! gcloud --project "$PROJECT" iam workload-identity-pools providers describe "$PROVIDER" \
-     --location=global --workload-identity-pool="$POOL" >/dev/null 2>&1; then
-  gcloud --project "$PROJECT" iam workload-identity-pools providers create-oidc "$PROVIDER" \
-    --location=global --workload-identity-pool="$POOL" \
-    --issuer-uri="https://token.actions.githubusercontent.com" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-    --attribute-condition="attribute.repository=='${GH_REPO}'"
-fi
-
-# Allow the GitHub repo to impersonate the deployer SA
 gcloud --project "$PROJECT" iam service-accounts add-iam-policy-binding \
   "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/attribute.repository/${GH_REPO}"
+  --member="principalSet://iam.googleapis.com/projects/${OP_NUMBER}/locations/global/workloadIdentityPools/${POOL}/attribute.repository/${GH_REPO}"
 
 echo
 echo "Add these as GitHub repo secrets:"
 echo "  GCP_PROJECT=${PROJECT}"
-echo "  GCP_WIF_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/providers/${PROVIDER}"
+echo "  GCP_WIF_PROVIDER=projects/${OP_NUMBER}/locations/global/workloadIdentityPools/${POOL}/providers/${PROVIDER}"
 echo "  GCP_DEPLOYER_SA=deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com"
 echo
-echo "To mint a JSON key for the RunPod trainer SA:"
+# DEVIATION from the workspace-wide "no SA JSON keys anywhere" rule:
+# RunPod is external compute → can't use Workload Identity Federation directly.
+# The trainer key is the documented exception. Store it in Secret Manager
+# (op/deepvogue-trainer-key) rather than checking it in.
+echo "To mint a JSON key for the RunPod trainer SA (documented WIF exception — external compute):"
 echo "  gcloud iam service-accounts keys create trainer-key.json \\"
 echo "    --iam-account=deepvogue-trainer-sa@${PROJECT}.iam.gserviceaccount.com"
 echo "Then set on the launcher: export GOOGLE_APPLICATION_CREDENTIALS_JSON=\"\$(cat trainer-key.json)\""

@@ -18,7 +18,7 @@ spec:
       containerConcurrency: 40
       timeoutSeconds: 300
       containers:
-        - image: us-central1-docker.pkg.dev/PROJECT_ID/deepvogue/prefect-server:latest
+        - image: europe-west1-docker.pkg.dev/PROJECT_ID/deepvogue/prefect-server:latest
           ports:
             - containerPort: 4200
           resources:

@@ -19,7 +19,7 @@ spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-        - image: us-central1-docker.pkg.dev/PROJECT_ID/deepvogue/mlflow:latest
+        - image: europe-west1-docker.pkg.dev/PROJECT_ID/deepvogue/mlflow:latest
           ports:
             - containerPort: 5000
           resources:

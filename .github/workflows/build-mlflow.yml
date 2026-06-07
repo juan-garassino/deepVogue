@@ -16,8 +16,8 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     env:
-      REGION: us-central1
-      IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/mlflow
+      REGION: europe-west1
+      IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/mlflow
     steps:
       - uses: actions/checkout@v4
       - id: auth
@@ -26,7 +26,7 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
       - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      - run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
       - name: Build & push
         run: |
           docker build -f infra/docker/mlflow/Dockerfile -t $IMAGE:${{ github.sha }} -t $IMAGE:latest infra/docker/mlflow

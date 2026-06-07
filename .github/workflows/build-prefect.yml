@@ -18,9 +18,9 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     env:
-      REGION: us-central1
-      SERVER_IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/prefect-server
-      WORKER_IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/prefect-worker
+      REGION: europe-west1
+      SERVER_IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/prefect-server
+      WORKER_IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/prefect-worker
     steps:
       - uses: actions/checkout@v4
       - id: auth
@@ -29,7 +29,7 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
       - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      - run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
       - name: Build server
         run: |
           docker build -f infra/docker/prefect/Dockerfile --build-arg TARGET=server \

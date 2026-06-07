@@ -6,7 +6,7 @@
 # webhook is unset, the script still creates uptime checks + policies but they
 # will fire with no destination.
 #
-# Required env: GCP_PROJECT, GCP_REGION (default us-central1).
+# Required env: GCP_PROJECT, GCP_REGION (default europe-west1).
 # Optional env: SLACK_WEBHOOK_URL, SLACK_CHANNEL (default '#alerts').
 
 # shellcheck source=_common.sh

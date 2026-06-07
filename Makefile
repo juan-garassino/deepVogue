@@ -326,9 +326,9 @@ nano-smoke: ## Run the local-nano integration smoke against a running stack
 	python scripts/run_nano_smoke.py
 
 # === MLOps stack — GCP deploy ===
-.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring gcp-setup publish
+.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget gcp-setup publish show destroy
 
-GCP_REGION ?= us-central1
+GCP_REGION ?= europe-west1
 GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
 
 publish: ## Publish latest Drive snapshot for DV_DATASET_NAME to DV_PUBLISH_TARGET as MODEL_ID
@@ -360,9 +360,34 @@ gcp-setup:
 	bash infra/gcp/setup-sql.sh
 	bash infra/gcp/setup-iam.sh
 	bash infra/gcp/setup-monitoring.sh || echo "monitoring setup failed; re-run \`make deploy-monitoring\` after deploying services"
+	bash infra/gcp/setup-budget.sh || echo "budget setup skipped (billing not linked yet?)"
 
 deploy-monitoring: ## Cloud Monitoring uptime + alerts (requires SLACK_WEBHOOK_URL)
 	bash infra/gcp/setup-monitoring.sh
+
+deploy-budget: ## €25/mo budget + 40/80/100% alerts on garassino-ml
+	bash infra/gcp/setup-budget.sh
+
+show: deploy-mlflow deploy-prefect deploy-inference deploy-monitoring ## Bring the stack up for a demo
+	@echo
+	@echo "Stack live in $(GCP_REGION):"
+	@gcloud --project=$(GCP_PROJECT) run services list --region=$(GCP_REGION) \
+	  --format='table(metadata.name,status.url)' 2>/dev/null || true
+
+destroy: ## Tear down runtime only — preserves buckets, AR images, IAM, SAs. Restart with `make show`.
+	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)
+	@for svc in deepvogue-inference deepvogue-mlflow deepvogue-prefect-server; do \
+	  echo "deleting service $$svc"; \
+	  gcloud --project=$(GCP_PROJECT) run services delete $$svc \
+	    --region=$(GCP_REGION) --quiet 2>/dev/null || true; \
+	done
+	@echo "deleting prefect-worker job"
+	gcloud --project=$(GCP_PROJECT) run jobs delete deepvogue-prefect-worker \
+	  --region=$(GCP_REGION) --quiet 2>/dev/null || true
+	@echo "stopping Cloud SQL (preserves data; restart in show)"
+	gcloud --project=$(GCP_PROJECT) sql instances patch deepvogue-pg \
+	  --activation-policy=NEVER --quiet 2>/dev/null || true
+	@echo "Runtime torn down. Buckets + AR + IAM preserved."
 
 # === RunPod training backend ===
 .PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop
