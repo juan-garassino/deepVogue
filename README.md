@@ -142,14 +142,20 @@ The pod runs `infra/docker/train/entrypoint.sh`: gcloud SA activation → GPU + 
 
 ## GCP show-and-destroy
 
-Prerequisites: `garassino-op` is already bootstrapped (owns the `github-pool` WIF + Secret Manager). This stack lives in `garassino-ml` and federates from `op`.
+The stack lives in **`garassino-ml`** and federates auth from **`garassino-op`** (control plane: WIF, TF state, Secret Manager, log sink).
 
 ```bash
-export GCP_PROJECT=garassino-ml GITHUB_REPO=owner/deepvogue
-make gcp-setup                      # APIs, buckets, AR repo, Cloud SQL, runtime SAs,
-                                    # cross-project WIF binding, monitoring, €25 budget
+# 1. One-time op bootstrap (creates WIF pool + secrets + TF state bucket)
+GCP_PROJECT=garassino-op GITHUB_REPO=<owner>/deepvogue make gcp-setup-op
 
-# Demo cycle
+# 2. One-time ml setup (runtime SAs, AR repo, cross-project WIF binding, monitoring, €25 budget)
+export GCP_PROJECT=garassino-ml GITHUB_REPO=<owner>/deepvogue
+make gcp-setup
+
+# 3. Mint a Neon project (free tier) → grab the two DSNs, then:
+NEON_MLFLOW_DSN='postgresql://...' NEON_PREFECT_DSN='postgresql://...' make deploy-db-secrets
+
+# 4. Demo cycle
 make show                           # builds + deploys mlflow, prefect, inference, monitoring
 # … run the demo …
 make destroy                        # tears down runtime; preserves data + images + IAM

@@ -122,26 +122,7 @@ alertStrategy:
 YAML
 )"
 
-# Cloud SQL CPU > 80% over 15 min.
-write_policy "deepvogue-cloudsql-cpu" "$(cat <<'YAML'
-displayName: deepvogue-cloudsql-cpu
-combiner: OR
-conditions:
-- displayName: CPU > 80% (15m)
-  conditionThreshold:
-    filter: |
-      metric.type="cloudsql.googleapis.com/database/cpu/utilization"
-      resource.type="cloudsql_database"
-    comparison: COMPARISON_GT
-    thresholdValue: 0.8
-    duration: 900s
-    aggregations:
-    - alignmentPeriod: 60s
-      perSeriesAligner: ALIGN_MEAN
-alertStrategy:
-  autoClose: 86400s
-YAML
-)"
+# (Cloud SQL CPU policy intentionally removed — MLflow + Prefect use Neon now.)
 
 # Uptime-check failure (any of the deepvogue-* uptime checks).
 write_policy "deepvogue-uptime-failure" "$(cat <<'YAML'

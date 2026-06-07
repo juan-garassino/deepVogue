@@ -326,7 +326,7 @@ nano-smoke: ## Run the local-nano integration smoke against a running stack
 	python scripts/run_nano_smoke.py
 
 # === MLOps stack — GCP deploy ===
-.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget gcp-setup publish show destroy
+.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget deploy-db-secrets gcp-setup gcp-setup-op publish show destroy
 
 GCP_REGION ?= europe-west1
 GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
@@ -342,11 +342,17 @@ deploy-inference:
 	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
 
 deploy-mlflow:
-	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/mlflow.service.yaml | \
+	@OP_NUMBER=$$(gcloud projects describe $${GCP_OP_PROJECT:-garassino-op} --format='value(projectNumber)' 2>/dev/null); \
+	test -n "$$OP_NUMBER" || (echo "could not resolve garassino-op project number; run \`make gcp-setup-op\` first" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|OP_PROJECT_NUMBER|$$OP_NUMBER|g" \
+	  infra/cloudrun/mlflow.service.yaml | \
 	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
 
 deploy-prefect:
-	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/prefect-server.service.yaml | \
+	@OP_NUMBER=$$(gcloud projects describe $${GCP_OP_PROJECT:-garassino-op} --format='value(projectNumber)' 2>/dev/null); \
+	test -n "$$OP_NUMBER" || (echo "could not resolve garassino-op project number; run \`make gcp-setup-op\` first" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|OP_PROJECT_NUMBER|$$OP_NUMBER|g" \
+	  infra/cloudrun/prefect-server.service.yaml | \
 	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
 	@SERVER_URL=$$(gcloud --project=$(GCP_PROJECT) run services describe deepvogue-prefect-server \
 	  --region=$(GCP_REGION) --format='value(status.url)'); \
@@ -355,10 +361,14 @@ deploy-prefect:
 	  infra/cloudrun/prefect-worker.job.yaml | \
 	  gcloud --project=$(GCP_PROJECT) run jobs replace - --region=$(GCP_REGION)
 
+gcp-setup-op: ## One-time: bootstrap garassino-op (WIF + TF state + log sink + secrets)
+	@test -n "$$GITHUB_REPO" || (echo "set GITHUB_REPO=owner/repo" && exit 1)
+	GCP_PROJECT=$${GCP_OP_PROJECT:-garassino-op} bash infra/gcp/setup-op.sh
+
 gcp-setup:
 	bash infra/gcp/setup.sh
-	bash infra/gcp/setup-sql.sh
 	bash infra/gcp/setup-iam.sh
+	bash infra/gcp/setup-db-secrets.sh || echo "db-secrets skipped (NEON_*_DSN not set; re-run \`make deploy-db-secrets\` later)"
 	bash infra/gcp/setup-monitoring.sh || echo "monitoring setup failed; re-run \`make deploy-monitoring\` after deploying services"
 	bash infra/gcp/setup-budget.sh || echo "budget setup skipped (billing not linked yet?)"
 
@@ -367,6 +377,9 @@ deploy-monitoring: ## Cloud Monitoring uptime + alerts (requires SLACK_WEBHOOK_U
 
 deploy-budget: ## €25/mo budget + 40/80/100% alerts on garassino-ml
 	bash infra/gcp/setup-budget.sh
+
+deploy-db-secrets: ## Push NEON_MLFLOW_DSN + NEON_PREFECT_DSN into op's Secret Manager
+	bash infra/gcp/setup-db-secrets.sh
 
 show: deploy-mlflow deploy-prefect deploy-inference deploy-monitoring ## Bring the stack up for a demo
 	@echo
@@ -384,10 +397,7 @@ destroy: ## Tear down runtime only — preserves buckets, AR images, IAM, SAs. R
 	@echo "deleting prefect-worker job"
 	gcloud --project=$(GCP_PROJECT) run jobs delete deepvogue-prefect-worker \
 	  --region=$(GCP_REGION) --quiet 2>/dev/null || true
-	@echo "stopping Cloud SQL (preserves data; restart in show)"
-	gcloud --project=$(GCP_PROJECT) sql instances patch deepvogue-pg \
-	  --activation-policy=NEVER --quiet 2>/dev/null || true
-	@echo "Runtime torn down. Buckets + AR + IAM preserved."
+	@echo "Runtime torn down. Buckets + AR + IAM + Neon (external) preserved."
 
 # === RunPod training backend ===
 .PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop

@@ -30,7 +30,7 @@ spec:
             - name: MLFLOW_BACKEND_STORE_URI
               valueFrom:
                 secretKeyRef:
-                  name: deepvogue-mlflow-db-uri
+                  name: projects/OP_PROJECT_NUMBER/secrets/op-neon-mlflow-dsn
                   key: latest
             - name: MLFLOW_ARTIFACTS_DESTINATION
               value: gs://deepvogue-mlflow

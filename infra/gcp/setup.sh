@@ -34,4 +34,4 @@ fi
 
 echo
 echo "Stage 1 (APIs, buckets, AR) complete."
-echo "Next: infra/gcp/setup-sql.sh and infra/gcp/setup-iam.sh"
+echo "Next: infra/gcp/setup-iam.sh and infra/gcp/setup-db-secrets.sh"
