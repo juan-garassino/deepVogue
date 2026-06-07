@@ -79,6 +79,9 @@ The canonical entry point is `notebooks/deepVogue_colab.ipynb` (cells 00–07: s
 
 ## MLOps stack
 
+> **Operator-facing reference:** [`docs/OPERATIONS.md`](docs/OPERATIONS.md) holds the canonical cold-start sequence, runbook, architecture decisions, and cost table. This section is the internal Claude-Code summary; the operations doc is the source of truth when they conflict.
+
+
 Local-nano stack (docker-compose) mirrors the prod-GCP stack one-for-one. Same code, same `models.yaml`, same flows — only the artifact backend (`DV_ARTIFACT_BACKEND=s3` → MinIO vs `gcs` → GCS) and endpoint URLs change.
 
 | Env var | Purpose |

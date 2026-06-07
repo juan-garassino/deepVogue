@@ -142,7 +142,7 @@ The pod runs `infra/docker/train/entrypoint.sh`: gcloud SA activation → GPU + 
 
 ## GCP show-and-destroy
 
-The stack lives in **`garassino-ml`** and federates auth from **`garassino-op`** (control plane: WIF, TF state, Secret Manager, log sink).
+The stack lives in **`garassino-ml`** and federates auth from **`garassino-op`** (control plane: WIF, TF state, Secret Manager, log sink). Full runbook — cold-start sequence, daily ops, training paths, failure modes, architecture decisions, cost expectations — in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ```bash
 # 1. One-time op bootstrap (creates WIF pool + secrets + TF state bucket)
