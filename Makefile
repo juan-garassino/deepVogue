@@ -400,9 +400,12 @@ destroy: ## Tear down runtime only — preserves buckets, AR images, IAM, SAs. R
 	@echo "Runtime torn down. Buckets + AR + IAM + Neon (external) preserved."
 
 # === RunPod training backend ===
-.PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop
+.PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop \
+        vertex-push vertex-train vertex-status vertex-logs vertex-cancel
 
-RUNPOD_IMAGE ?= ghcr.io/$(shell git config --get remote.origin.url | sed -E 's#.*[:/]([^/]+/[^/.]+)(\.git)?#\1#' | tr '[:upper:]' '[:lower:]')-train
+# NB: no '#' inside the shell call — make treats it as a comment start and
+# truncates the line, leaving $(shell unterminated.
+RUNPOD_IMAGE ?= ghcr.io/$(shell git config --get remote.origin.url | sed -E 's@.*[:/]([^/]+/[^/.]+)(\.git)?@\1@' | tr '[:upper:]' '[:lower:]')-train
 RUNPOD_TAG ?= latest
 
 runpod-build: ## Build the GPU train image locally
@@ -429,6 +432,35 @@ sys.stdout.write(fn('$(POD_ID)') if fn else 'SDK lacks get_pod_logs; check https
 runpod-terminate: ## Terminate (delete) a pod: make runpod-terminate POD_ID=<id>
 	@test -n "$(POD_ID)" || (echo "usage: make runpod-terminate POD_ID=<id>" && exit 1)
 	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; runpod.terminate_pod('$(POD_ID)'); print('terminated $(POD_ID)')"
+
+# ----------------------------------
+#  Vertex AI training (GCP-native ephemeral GPU; VM auto-released on exit)
+# ----------------------------------
+
+VERTEX_IMAGE ?= $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue/deepvogue-train
+VERTEX_TAG ?= latest
+
+vertex-push: runpod-build ## Tag + push the train image into Artifact Registry (Vertex must pull from AR)
+	@test -n "$(GCP_PROJECT)" || (echo "usage: make vertex-push GCP_PROJECT=garassino-ml" && exit 1)
+	docker tag $(RUNPOD_IMAGE):$(RUNPOD_TAG) $(VERTEX_IMAGE):$(VERTEX_TAG)
+	docker push $(VERTEX_IMAGE):$(VERTEX_TAG)
+
+vertex-train: ## Submit a Vertex AI training job (env: GCP_PROJECT, DV_DATASET_URI, DV_RUN_URI; no SA key needed)
+	@test -n "$(MODEL_ID)" || (echo "usage: make vertex-train MODEL_ID=<id> GCP_PROJECT=garassino-ml DV_DATASET_URI=gs://... DV_RUN_URI=gs://..." && exit 1)
+	DV_MODEL_ID=$(MODEL_ID) VERTEX_IMAGE=$(VERTEX_IMAGE):$(VERTEX_TAG) \
+	    python scripts/submit_vertex_train.py --model-id=$(MODEL_ID)
+
+vertex-status: ## Describe a job: make vertex-status JOB=<custom-job resource name or numeric id>
+	@test -n "$(JOB)" || (echo "usage: make vertex-status JOB=<id>" && exit 1)
+	gcloud ai custom-jobs describe "$(JOB)" --project=$(GCP_PROJECT) --region=$(GCP_REGION)
+
+vertex-logs: ## Stream logs of a job: make vertex-logs JOB=<id>
+	@test -n "$(JOB)" || (echo "usage: make vertex-logs JOB=<id>" && exit 1)
+	gcloud ai custom-jobs stream-logs "$(JOB)" --project=$(GCP_PROJECT) --region=$(GCP_REGION)
+
+vertex-cancel: ## Cancel a running job: make vertex-cancel JOB=<id>
+	@test -n "$(JOB)" || (echo "usage: make vertex-cancel JOB=<id>" && exit 1)
+	gcloud ai custom-jobs cancel "$(JOB)" --project=$(GCP_PROJECT) --region=$(GCP_REGION)
 
 runpod-stop: ## Pause a pod (still bills volume): make runpod-stop POD_ID=<id>
 	@test -n "$(POD_ID)" || (echo "usage: make runpod-stop POD_ID=<id>" && exit 1)

@@ -65,7 +65,7 @@ After this, the workspace is provisioned and CI can deploy.
 
 ## 3. Training paths
 
-**Two paths, same backend.** Both land snapshots in `gs://deepvogue-runs/<dataset>/` and publish to `gs://deepvogue-models/models.yaml`.
+**Three paths, same artifacts.** All land snapshots in `gs://deepvogue-runs/<dataset>/` and publish to `gs://deepvogue-models/models.yaml`.
 
 ### Colab (interactive; v1 default)
 
@@ -101,6 +101,47 @@ make runpod-terminate POD_ID=<id>   # idempotent
 
 The pod self-terminates via RunPod GraphQL `podTerminate` on entrypoint exit (success or failure). Snapshots mirror to GCS every 60s while training runs; final pkl + FID land in `models.yaml` via `publish_checkpoint`.
 
+### Vertex AI (GCP-native; same train image, no SA key)
+
+The same train container runs as a Vertex AI CustomJob: GCP provisions the GPU
+VM, runs the container to completion, and **releases the VM automatically** —
+zero idle cost and nothing to reap. Auth is ambient ADC via the attached
+trainer SA (the entrypoint detects the missing
+`GOOGLE_APPLICATION_CREDENTIALS_JSON` and uses the metadata server), so the
+RunPod SA-key exception does not apply here.
+
+```bash
+# Prereq once: `make gcp-setup` (enables aiplatform API + IAM bindings),
+# then push the train image into Artifact Registry (Vertex can't pull GHCR):
+make vertex-push GCP_PROJECT=garassino-ml
+
+# Submit (launcher needs gcloud auth with roles/aiplatform.user)
+make vertex-train \
+  MODEL_ID=tarot GCP_PROJECT=garassino-ml DV_KIMG=5000 DV_GAMMA=2 DV_BATCH=32 DV_RES=512 \
+  DV_DATASET_URI=gs://deepvogue-datasets/tarot.zip \
+  DV_RUN_URI=gs://deepvogue-runs/tarot \
+  DV_PUBLISH_TARGET=gs://deepvogue-models
+
+# Returns the customJobs resource name immediately (JSON line), then blocks
+# until the job ends or VERTEX_MAX_TRAIN_HOURS (default 24) elapses.
+
+# Ops while running
+make vertex-status JOB=<id>
+make vertex-logs   JOB=<id>
+make vertex-cancel JOB=<id>
+```
+
+GPU tiers (europe-west1): default `NVIDIA_L4` on `g2-standard-8` (~€0.85/hr,
+24 GB); cheap tier `VERTEX_ACCELERATOR=NVIDIA_TESLA_T4 VERTEX_MACHINE_TYPE=n1-standard-8`
+(~€0.55/hr, 16 GB). A100s live in europe-west4 (`GCP_REGION=europe-west4`).
+GPU quota for Vertex (`custom_model_training_nvidia_l4_gpus`) must be granted
+once per project — request it in IAM → Quotas if the first submit fails with
+a quota error.
+
+Pick RunPod for big GPUs at spot prices (H100); pick Vertex when you want the
+job inside `garassino-ml` (budget alerts cover it, logs in Cloud Logging, no
+SA key to mint or rotate).
+
 ---
 
 ## 4. Failure modes (runbook)
@@ -114,6 +155,9 @@ The pod self-terminates via RunPod GraphQL `podTerminate` on entrypoint exit (su
 | MLflow service crashes: secret access denied | `mlflow-server-sa` missing `secretAccessor` on `op-neon-mlflow-dsn` | Re-run `make deploy-db-secrets` |
 | RunPod pod stuck "RUNNING" indefinitely | Container failed to pull GHCR image (private + no auth) | Confirm GHCR package visibility is **public** (CI step does this; first run may need manual flip in GitHub Packages settings) |
 | RunPod pod errors at boot: `gsutil 401` | Bad SA JSON or expired key | Re-mint trainer-sa key, re-upsert into `op-trainer-key` |
+| `make vertex-train` fails: quota exceeded | No Vertex GPU quota in region | IAM → Quotas → request `custom_model_training_nvidia_l4_gpus` (or T4 equivalent) for europe-west1 |
+| Vertex job fails at boot: image pull error | Train image not in Artifact Registry | `make vertex-push GCP_PROJECT=garassino-ml` (Vertex can't pull GHCR) |
+| `make vertex-train` Python error: no module `google.cloud.aiplatform` | SDK not installed in caller env | `pip install google-cloud-aiplatform>=1.60.0` |
 | RunPod pod errors at boot: `assert torch.cuda.is_available()` | GPU type unavailable in region; pod got CPU | Re-submit with a more common GPU SKU (`RUNPOD_GPU_TYPE="NVIDIA A40"`) |
 | RunPod pod errors at boot: custom ops compile fail | nvcc/torch mismatch | Switch train Dockerfile base to `nvidia/cuda:12.1.0-devel-ubuntu22.04` + manual torch install |
 | `make runpod-train` Python error: no module `runpod` | SDK not installed in caller env | `pip install runpod>=1.6.0` |
@@ -178,7 +222,8 @@ deepVogue-mlops/
 │   │   └── backends/
 │   │       ├── local.py              # nano-stack mock + real prepare/publish
 │   │       ├── colab.py              # v2 stub — manual notebook path for v1
-│   │       └── runpod.py             # real GPU pod submission + lifecycle
+│   │       ├── runpod.py             # real GPU pod submission + lifecycle
+│   │       └── vertex.py             # Vertex AI CustomJob — GCP-native, no SA key
 │   ├── serve/
 │   │   ├── api.py                    # FastAPI inference (+ IAP refresher hook)
 │   │   ├── loader.py                 # .pkl loader + GPU warmup
@@ -200,6 +245,7 @@ deepVogue-mlops/
 │       └── setup-budget.sh           # ml: €25 budget + 40/80/100% thresholds
 ├── scripts/
 │   ├── submit_runpod_train.py        # CLI wrapper around backends.runpod.train
+│   ├── submit_vertex_train.py        # CLI wrapper around backends.vertex.train
 │   └── run_nano_smoke.py             # docker-compose end-to-end smoke
 ├── .github/
 │   ├── actions/notify-telegram/      # composite — silent without TELEGRAM_* secrets

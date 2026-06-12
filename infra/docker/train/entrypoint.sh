@@ -11,8 +11,10 @@
 #   DV_BATCH          total batch size
 #   DV_RES            resolution (e.g. 256, 512)
 #   DV_PUBLISH_TARGET gs:// root where models.yaml lives
-#   GOOGLE_APPLICATION_CREDENTIALS_JSON  full SA JSON; activated at startup
-#   RUNPOD_API_KEY    used to self-terminate via GraphQL at the end
+#   GOOGLE_APPLICATION_CREDENTIALS_JSON  full SA JSON (RunPod only); when
+#                     absent, ambient ADC is used (Vertex AI / GCE metadata)
+#   RUNPOD_API_KEY    used to self-terminate via GraphQL at the end (RunPod
+#                     only; Vertex releases the VM itself)
 #
 # RunPod injects automatically:
 #   RUNPOD_POD_ID     this pod's id (used for self-terminate)
@@ -92,19 +94,25 @@ require DV_MODEL_ID
 require DV_KIMG
 require DV_GAMMA
 require DV_BATCH
-require GOOGLE_APPLICATION_CREDENTIALS_JSON
 
 : "${DV_CFG:=stylegan3-t}"
 : "${DV_RES:=256}"
 : "${SYNC_INTERVAL:=60}"
 
-# ---------- 2. activate SA so gsutil works ----------
-SA_JSON=/tmp/sa.json
-printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > "$SA_JSON"
-chmod 600 "$SA_JSON"
-gcloud auth activate-service-account --key-file="$SA_JSON" --quiet
-export GOOGLE_APPLICATION_CREDENTIALS="$SA_JSON"
-log "gcloud auth: $(gcloud config get-value account 2>/dev/null)"
+# ---------- 2. auth so gsutil works ----------
+# RunPod (external compute): SA JSON key injected via env — the documented
+# WIF exception. Vertex AI / GCE: no key needed; the attached service account
+# provides ambient ADC through the metadata server.
+if [ -n "${GOOGLE_APPLICATION_CREDENTIALS_JSON:-}" ]; then
+    SA_JSON=/tmp/sa.json
+    printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > "$SA_JSON"
+    chmod 600 "$SA_JSON"
+    gcloud auth activate-service-account --key-file="$SA_JSON" --quiet
+    export GOOGLE_APPLICATION_CREDENTIALS="$SA_JSON"
+    log "gcloud auth: SA key — $(gcloud config get-value account 2>/dev/null)"
+else
+    log "gcloud auth: no SA key in env — using ambient ADC (Vertex/GCE metadata)"
+fi
 
 # ---------- 3. GPU + custom-ops warmup (fail fast on CUDA mismatch) ----------
 nvidia-smi || { log "ERROR: nvidia-smi unavailable"; exit 3; }

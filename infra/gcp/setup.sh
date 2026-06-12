@@ -15,7 +15,8 @@ gcloud --project "$PROJECT" services enable \
   iam.googleapis.com \
   vpcaccess.googleapis.com \
   servicenetworking.googleapis.com \
-  iap.googleapis.com
+  iap.googleapis.com \
+  aiplatform.googleapis.com
 
 step "GCS buckets"
 for b in models datasets walks mlflow queue; do

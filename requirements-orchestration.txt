@@ -9,3 +9,4 @@ slack-sdk>=3.27.0
 pytest-asyncio>=0.23.0
 moto[s3]>=5.0.0
 runpod>=1.6.0
+google-cloud-aiplatform>=1.60.0

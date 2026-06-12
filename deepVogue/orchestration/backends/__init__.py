@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Literal, Protocol
 
-BackendName = Literal["local", "colab", "runpod"]
+BackendName = Literal["local", "colab", "runpod", "vertex"]
 
 
 class BackendOp(Protocol):
@@ -14,7 +14,7 @@ class BackendOp(Protocol):
 
 
 def get_backend(name: str) -> BackendOp:
-    from . import local, colab, runpod
+    from . import local, colab, runpod, vertex
 
     name = name.lower()
     if name == "local":
@@ -23,4 +23,6 @@ def get_backend(name: str) -> BackendOp:
         return colab
     if name == "runpod":
         return runpod
+    if name == "vertex":
+        return vertex
     raise ValueError(f"unknown backend: {name!r}")

@@ -105,7 +105,7 @@ New Makefile targets:
 - `make gcp-setup` — runs `infra/gcp/setup.sh` + setup-sql.sh + setup-iam.sh
 - `make deploy-inference` / `deploy-mlflow` / `deploy-prefect` — Cloud Run deploy
 
-Prefect flows live in `deepVogue/orchestration/flows.py`. Each task dispatches via `get_backend(backend)`; v1 supports `backend="local"` (real `prepare`/`publish`, mock `train`/`project`/`walk`/`eval`) and `backend="runpod"` (real `train` on a RunPod GPU pod; the rest delegate to `local`). `colab` is scaffolded but raises `NotImplementedError` — manual Colab + `make publish` is the Colab path.
+Prefect flows live in `deepVogue/orchestration/flows.py`. Each task dispatches via `get_backend(backend)`; v1 supports `backend="local"` (real `prepare`/`publish`, mock `train`/`project`/`walk`/`eval`), `backend="runpod"` (real `train` on a RunPod GPU pod; the rest delegate to `local`), and `backend="vertex"` (real `train` as a Vertex AI CustomJob in `$GCP_PROJECT` — same train image from Artifact Registry, ambient-ADC auth, VM auto-released on exit; the rest delegate to `local`). `colab` is scaffolded but raises `NotImplementedError` — manual Colab + `make publish` is the Colab path.
 
 Colab logs to remote MLflow via `deepVogue/tracking/mlflow_helpers.py::log_training_run`. IAP auth: notebook cell sets `MLFLOW_TRACKING_TOKEN` from `gcloud auth print-identity-token --audiences=<iap-oauth-client-id>`.
 

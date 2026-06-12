@@ -25,6 +25,15 @@ grant "prefect-worker-sa@${PROJECT}.iam.gserviceaccount.com" roles/storage.objec
 grant "prefect-worker-sa@${PROJECT}.iam.gserviceaccount.com" roles/cloudsql.client
 grant "fastapi-inference-sa@${PROJECT}.iam.gserviceaccount.com" roles/storage.objectViewer
 grant "deepvogue-trainer-sa@${PROJECT}.iam.gserviceaccount.com" roles/storage.objectAdmin
+# Vertex AI training: the deployer submits CustomJobs that run AS the trainer SA;
+# the Vertex service agent pulls the train image from Artifact Registry.
+grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/aiplatform.user
+gcloud --project "$PROJECT" iam service-accounts add-iam-policy-binding \
+  "deepvogue-trainer-sa@${PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser" \
+  --member="serviceAccount:deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" \
+  --condition=None 2>/dev/null || true
+grant "service-${PROJECT_NUMBER}@gcp-sa-aiplatform-cc.iam.gserviceaccount.com" roles/artifactregistry.reader
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/artifactregistry.writer
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/run.admin
 grant "deepvogue-deployer-sa@${PROJECT}.iam.gserviceaccount.com" roles/iam.serviceAccountUser
