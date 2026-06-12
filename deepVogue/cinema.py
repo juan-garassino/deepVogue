@@ -42,7 +42,7 @@ def project_frames_cmd(stride: int, num_steps: int, projector_kind: str) -> None
     """
     import torch
     from PIL import Image
-    from deepVogue import legacy, neuronal_network_utils
+    from deepVogue import _runtime
     if projector_kind == "lpips":
         from deepVogue.projector import project as project_fn
     else:
@@ -55,10 +55,9 @@ def project_frames_cmd(stride: int, num_steps: int, projector_kind: str) -> None
     idx = json.loads(idx_path.read_text())
     Path(p.anchors_dir).mkdir(parents=True, exist_ok=True)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = _runtime.pick_device()
     click.echo(f"[cinema] loading {p.network_pkl} on {device}  (once)")
-    with neuronal_network_utils.util.open_url(str(p.network_pkl)) as fp:
-        G = legacy.load_network_pkl(fp)["G_ema"].requires_grad_(False).to(device)
+    G = _runtime.load_generator(p.network_pkl, device)
     res = int(G.img_resolution)
 
     with tempfile.TemporaryDirectory(prefix="dv_proj_") as tmp:
@@ -108,7 +107,7 @@ def eval_fid_cmd() -> None:
     log = next(Path(p.run_dir).rglob("metric-fid50k_full.jsonl"), None)
     if log is None:
         raise click.ClickException(f"no FID log under {p.run_dir}")
-    rows = [json.loads(l) for l in log.read_text().splitlines() if l.strip()]
+    rows = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
     for r in rows:
         click.echo(f"{r['snapshot_pkl']:<40} fid={r['results']['fid50k_full']:.3f}")
 

@@ -41,18 +41,9 @@ _CACHE = _Cache(capacity=2)
 # .pkl → G_ema
 # ---------------------------------------------------------------------------
 
-def _load_pkl(pkl_path: str):
-    """Load a StyleGAN .pkl and return G_ema on the right device, eval mode."""
-    import torch
-    from deepVogue import legacy, neuronal_network_utils
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    with neuronal_network_utils.util.open_url(pkl_path) as f:
-        G = legacy.load_network_pkl(f)["G_ema"].requires_grad_(False).to(device).eval()
-    return G
-
-
 def load(entry: ModelEntry):
-    return _CACHE.get_or_load(entry.id, lambda: _load_pkl(entry.pkl))
+    from deepVogue._runtime import load_generator
+    return _CACHE.get_or_load(entry.id, lambda: load_generator(entry.pkl))
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +62,7 @@ def generate(entry: ModelEntry, *, seed: int, trunc: Optional[float] = None,
     """Return PNG bytes for a single generated image."""
     import torch
     from PIL import Image
+    from deepVogue._runtime import to_uint8_hwc
     G = load(entry)
     device = next(G.parameters()).device
     psi = entry.default_trunc if trunc is None else trunc
@@ -82,18 +74,18 @@ def generate(entry: ModelEntry, *, seed: int, trunc: Optional[float] = None,
             direction = eigvec[:, factor_idx].to(device).float()
             w = w + factor_amp * direction[None, None, :]
         img = G.synthesis(w, noise_mode="const")
-    img = (img + 1) * (255 / 2)
-    img = img.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
     buf = io.BytesIO()
-    Image.fromarray(img).save(buf, format="PNG")
+    Image.fromarray(to_uint8_hwc(img)).save(buf, format="PNG")
     return buf.getvalue()
 
 
 def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
          mode: str = "cubic", trunc: Optional[float] = None) -> bytes:
     """Return mp4 bytes for a latent walk between seeds."""
+    import os
+    import tempfile
     import torch
-    import imageio.v2 as imageio
+    from deepVogue._runtime import open_video_writer, to_uint8_hwc
     from deepVogue.walk import _interpolate_anchors
     if len(seeds) < 2:
         raise ValueError("walk needs ≥2 seeds")
@@ -107,26 +99,24 @@ def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
         ]
     anchors = np.stack(ws, axis=0)
     traj = _interpolate_anchors(anchors, frames_per_segment=steps, mode=mode)
-    T = traj.shape[0]
 
-    import tempfile, os as _os
+    # libx264 muxing needs a seekable file, so go through a temp path
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tf:
         tmp_path = tf.name
     try:
-        writer = imageio.get_writer(tmp_path, fps=fps, codec="libx264",
-                                    bitrate="16M", macro_block_size=1)
+        writer = open_video_writer(tmp_path, fps)
         try:
             with torch.no_grad():
-                for t in range(T):
+                for t in range(traj.shape[0]):
                     w = torch.from_numpy(traj[t:t + 1]).to(device).float()
                     img = G.synthesis(w, noise_mode="const")
-                    img = (img + 1) * (255 / 2)
-                    img = img.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
-                    writer.append_data(img)
+                    writer.append_data(to_uint8_hwc(img))
         finally:
             writer.close()
         with open(tmp_path, "rb") as f:
             return f.read()
     finally:
-        try: _os.unlink(tmp_path)
-        except OSError: pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass

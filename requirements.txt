@@ -22,7 +22,7 @@ numpy
 scipy
 Pillow
 imageio
-imageio-ffmpeg==0.4.3
+imageio-ffmpeg>=0.4.3
 opensimplex
 
 # optional during inference (kept light); training pulls full torch stack via requirements-train.txt

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -164,15 +163,13 @@ def main(network_pkl: str, anchors_dir: Path, order_json: Optional[Path],
          seed: int) -> None:
     """Render a latent walk through projected anchors as an mp4."""
     import torch
-    import imageio.v2 as imageio
-    from deepVogue import legacy, neuronal_network_utils
+    from deepVogue import _runtime
 
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = _runtime.pick_device()
 
     click.echo(f"[walk] loading {network_pkl}")
-    with neuronal_network_utils.util.open_url(network_pkl) as fp:
-        G = legacy.load_network_pkl(fp)["G_ema"].requires_grad_(False).to(device)
+    G = _runtime.load_generator(network_pkl, device)
 
     anchors = _load_anchors(anchors_dir, order_json)
     click.echo(f"[walk] {anchors.shape[0]} anchors, W+ shape {anchors.shape[1:]}")
@@ -208,8 +205,7 @@ def main(network_pkl: str, anchors_dir: Path, order_json: Optional[Path],
         base = _osn_noise(T, traj.shape[2], seed=seed)
         noise_mod = base * (0.4 + 1.6 * rms[:, None])
 
-    writer = imageio.get_writer(str(out_mp4), fps=fps, codec="libx264", bitrate="16M",
-                                macro_block_size=1)
+    writer = _runtime.open_video_writer(out_mp4, fps)
     try:
         with torch.no_grad():
             for t in range(T):
@@ -217,9 +213,7 @@ def main(network_pkl: str, anchors_dir: Path, order_json: Optional[Path],
                 if noise_mod is not None:
                     w = w + torch.from_numpy(noise_mod[t][None, None, :]).to(device) * 0.05
                 img = G.synthesis(w, noise_mode="const")
-                img = (img + 1) * (255 / 2)
-                img = img.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
-                writer.append_data(img)
+                writer.append_data(_runtime.to_uint8_hwc(img))
                 if (t + 1) % max(1, T // 20) == 0:
                     click.echo(f"  frame {t+1}/{T}")
     finally:
