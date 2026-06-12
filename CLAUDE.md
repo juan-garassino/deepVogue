@@ -102,6 +102,7 @@ New Makefile targets:
 - `make nano-up` / `nano-down` / `nano-logs` — local docker-compose stack
 - `make nano-smoke` — full pipeline against the local stack
 - `make publish MODEL_ID=...` — Drive → GCS + `models.yaml` append + Slack
+- `make publish-dataset DATASET=...` — Drive `dataset.zip` (+ `frames_index.json`) → `gs://deepvogue-datasets/<name>.zip`; the printed `dataset_uri` is the `DV_DATASET_URI` for RunPod/Vertex train jobs
 - `make gcp-setup` — runs `infra/gcp/setup.sh` + setup-sql.sh + setup-iam.sh
 - `make deploy-inference` / `deploy-mlflow` / `deploy-prefect` — Cloud Run deploy
 

@@ -326,7 +326,7 @@ nano-smoke: ## Run the local-nano integration smoke against a running stack
 	python scripts/run_nano_smoke.py
 
 # === MLOps stack — GCP deploy ===
-.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget deploy-db-secrets gcp-setup gcp-setup-op publish show destroy
+.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget deploy-db-secrets gcp-setup gcp-setup-op publish publish-dataset show destroy
 
 GCP_REGION ?= europe-west1
 GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
@@ -335,6 +335,11 @@ publish: ## Publish latest Drive snapshot for DV_DATASET_NAME to DV_PUBLISH_TARG
 	@test -n "$(MODEL_ID)" || (echo "usage: make publish MODEL_ID=<id> [DV_DATASET_NAME=<name>]" && exit 1)
 	python -m deepVogue.publish --model-id=$(MODEL_ID) \
 	  --src-dir=$${DV_DRIVE_SYNC:?set DV_DRIVE_SYNC}/$${DV_DATASET_NAME:-default}
+
+publish-dataset: ## Upload Drive dataset.zip → GCS so RunPod/Vertex can train on it (DATASET=<name>)
+	@test -n "$(DATASET)" || (echo "usage: make publish-dataset DATASET=<name> DV_DATASET_DIR=<drive path> [DV_DATASET_GCS_ROOT=gs://deepvogue-datasets]" && exit 1)
+	python -m deepVogue.publish dataset --name=$(DATASET) \
+	  --src-dir=$${DV_DATASET_DIR:?set DV_DATASET_DIR}
 
 deploy-inference:
 	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)

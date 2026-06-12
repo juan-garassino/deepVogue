@@ -173,29 +173,84 @@ def publish_checkpoint(
     return info
 
 
+def publish_dataset(
+    *,
+    name: str,
+    src_dir: Path,
+    target_root: str | None = None,
+) -> dict[str, Any]:
+    """
+    Copy a prepared dataset from src_dir (Drive on Colab) to GCS so RunPod /
+    Vertex jobs can train on it: ``<root>/<name>.zip`` becomes DV_DATASET_URI.
+    ``frames_index.json`` rides along as ``<name>.frames_index.json`` when
+    present (latent-cinema anchor map; not needed by the train job itself).
+    """
+    target_root = target_root or os.environ.get(
+        "DV_DATASET_GCS_ROOT", "gs://deepvogue-datasets"
+    )
+    src_zip = Path(src_dir) / "dataset.zip"
+    if not src_zip.exists():
+        raise FileNotFoundError(f"no dataset.zip under {src_dir}")
+
+    _align_backend_with_target(target_root)
+    fs = get_artifact_fs()
+    target_path = strip_scheme(target_root).rstrip("/")
+
+    dataset_uri = f"{target_root.rstrip('/')}/{name}.zip"
+    _copy_to_fs(src_zip, fs, f"{target_path}/{name}.zip")
+
+    index_uri = None
+    src_index = Path(src_dir) / "frames_index.json"
+    if src_index.exists():
+        index_uri = f"{target_root.rstrip('/')}/{name}.frames_index.json"
+        _copy_to_fs(src_index, fs, f"{target_path}/{name}.frames_index.json")
+
+    info = {"dataset_uri": dataset_uri, "frames_index_uri": index_uri, "name": name}
+    slack.notify_success(
+        "publish-dataset", f"uploaded dataset {name}", {"uri": dataset_uri}
+    )
+    log.info("dataset published: DV_DATASET_URI=%s", dataset_uri)
+    return info
+
+
 def _main() -> None:
     import argparse
 
     p = argparse.ArgumentParser(prog="python -m deepVogue.publish")
-    p.add_argument("--model-id", required=True)
-    p.add_argument("--src-dir", required=True, type=Path)
-    p.add_argument("--backbone", default="sg3-t")
-    p.add_argument("--dataset-kind", default="stills")
-    p.add_argument("--default-trunc", default=0.7, type=float)
-    p.add_argument("--factors", default=None)
-    p.add_argument("--anchors-dir", default=None)
-    p.add_argument("--validate", action="store_true")
+    sub = p.add_subparsers(dest="cmd")
+
+    # default (no subcommand) = checkpoint publish, kept for `make publish` compat
+    for target in (p, sub.add_parser("checkpoint")):
+        target.add_argument("--model-id", required=target is not p)
+        target.add_argument("--src-dir", type=Path, required=target is not p)
+        target.add_argument("--backbone", default="sg3-t")
+        target.add_argument("--dataset-kind", default="stills")
+        target.add_argument("--default-trunc", default=0.7, type=float)
+        target.add_argument("--factors", default=None)
+        target.add_argument("--anchors-dir", default=None)
+        target.add_argument("--validate", action="store_true")
+
+    d = sub.add_parser("dataset", help="upload dataset.zip → GCS for RunPod/Vertex")
+    d.add_argument("--name", required=True)
+    d.add_argument("--src-dir", required=True, type=Path)
+    d.add_argument("--dest", default=None, help="default $DV_DATASET_GCS_ROOT or gs://deepvogue-datasets")
+
     args = p.parse_args()
-    info = publish_checkpoint(
-        model_id=args.model_id,
-        src_dir=args.src_dir,
-        backbone=args.backbone,
-        dataset_kind=args.dataset_kind,
-        default_trunc=args.default_trunc,
-        factors=args.factors,
-        anchors_dir=args.anchors_dir,
-        validate=args.validate,
-    )
+    if args.cmd == "dataset":
+        info = publish_dataset(name=args.name, src_dir=args.src_dir, target_root=args.dest)
+    else:
+        if not args.model_id or not args.src_dir:
+            p.error("--model-id and --src-dir are required")
+        info = publish_checkpoint(
+            model_id=args.model_id,
+            src_dir=args.src_dir,
+            backbone=args.backbone,
+            dataset_kind=args.dataset_kind,
+            default_trunc=args.default_trunc,
+            factors=args.factors,
+            anchors_dir=args.anchors_dir,
+            validate=args.validate,
+        )
     print(info)
 
 

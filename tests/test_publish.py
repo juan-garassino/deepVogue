@@ -112,3 +112,50 @@ def test_publish_appends_when_registry_exists(
         registry = yaml.safe_load(f)
     assert len(registry) == 2
     assert {e["id"] for e in registry} == {"existing", "tarot_v1"}
+
+
+@pytest.fixture
+def drive_dataset(tmp_path: Path) -> Path:
+    """Drive-style prepared dataset dir: dataset.zip + frames_index.json."""
+    d = tmp_path / "datasets" / "film_512"
+    d.mkdir(parents=True)
+    (d / "dataset.zip").write_bytes(b"PK\x03\x04" + b"\x00" * 12)
+    (d / "frames_index.json").write_text(json.dumps({"fps": 1, "frames": []}))
+    return d
+
+
+def test_publish_dataset_uploads_zip_and_index(drive_dataset, memory_fs, monkeypatch):
+    monkeypatch.setenv("DV_ARTIFACT_BACKEND", "memory")
+    monkeypatch.setenv("DV_DATASET_GCS_ROOT", "memory://deepvogue-datasets")
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    from deepVogue.publish import publish_dataset
+
+    info = publish_dataset(name="film", src_dir=drive_dataset)
+
+    assert info["dataset_uri"] == "memory://deepvogue-datasets/film.zip"
+    assert info["frames_index_uri"] == "memory://deepvogue-datasets/film.frames_index.json"
+    assert memory_fs.exists("deepvogue-datasets/film.zip")
+    assert memory_fs.exists("deepvogue-datasets/film.frames_index.json")
+    with memory_fs.open("deepvogue-datasets/film.zip", "rb") as f:
+        assert f.read(4) == b"PK\x03\x04"
+
+
+def test_publish_dataset_without_index(drive_dataset, memory_fs, monkeypatch):
+    monkeypatch.setenv("DV_ARTIFACT_BACKEND", "memory")
+    monkeypatch.setenv("DV_DATASET_GCS_ROOT", "memory://deepvogue-datasets")
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    (drive_dataset / "frames_index.json").unlink()
+    from deepVogue.publish import publish_dataset
+
+    info = publish_dataset(name="tarot", src_dir=drive_dataset)
+    assert info["frames_index_uri"] is None
+    assert memory_fs.exists("deepvogue-datasets/tarot.zip")
+    assert not memory_fs.exists("deepvogue-datasets/tarot.frames_index.json")
+
+
+def test_publish_dataset_missing_zip_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("DV_ARTIFACT_BACKEND", "memory")
+    from deepVogue.publish import publish_dataset
+
+    with pytest.raises(FileNotFoundError, match="dataset.zip"):
+        publish_dataset(name="x", src_dir=tmp_path)

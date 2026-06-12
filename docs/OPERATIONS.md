@@ -67,6 +67,8 @@ After this, the workspace is provisioned and CI can deploy.
 
 **Three paths, same artifacts.** All land snapshots in `gs://deepvogue-runs/<dataset>/` and publish to `gs://deepvogue-models/models.yaml`.
 
+**Data flow:** datasets are prepared on Colab against Drive (`make prepare-stills` / `prepare-frames`). RunPod and Vertex jobs can't read Drive — bridge once per dataset with `make publish-dataset DATASET=<name>` (run it in a Colab cell after prepare; uploads `dataset.zip` + `frames_index.json` from `$DV_DATASET_DIR` to `gs://deepvogue-datasets/<name>.zip` and prints the `DV_DATASET_URI` to pass to the train job). Datasets are immutable zips, so this is a one-time copy, not a sync.
+
 ### Colab (interactive; v1 default)
 
 Open `notebooks/deepVogue_colab.ipynb` on Colab. Cells 00–07 form a linear pipeline: setup → configure → prepare → train → project anchors → walk → factors → eval. Drive holds data + outputs; the code is git-cloned each session.
