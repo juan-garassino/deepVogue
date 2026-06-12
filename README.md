@@ -30,7 +30,7 @@ Colab GPU runtime:
 ```bash
 git clone --depth 1 https://github.com/JuanGarassino/deepVogue /content/deepVogue
 cd /content/deepVogue
-make colab-install              # pip install -e . + apt-get ffmpeg
+make colab-install              # pip install -e . + train/serve/bot reqs + apt-get ffmpeg
 make install-serve              # FastAPI + Telegram deps (only if running the bot)
 ```
 

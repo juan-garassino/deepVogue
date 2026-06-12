@@ -48,7 +48,7 @@ install_train_requirements:
 
 # Run from inside Colab after cloning the repo.
 colab-install:
-	@pip install -q -e . -r requirements-train.txt
+	@pip install -q -e . -r requirements-train.txt -r requirements-serve.txt -r requirements-bot.txt
 	@apt-get -qq install -y ffmpeg >/dev/null 2>&1 || true
 
 # Clone (or fast-forward) the repo into /content/deepVogue. Run this from a fresh

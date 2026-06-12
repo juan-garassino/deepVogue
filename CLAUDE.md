@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **deepVogue** is a **StyleGAN3-t base** (NVIDIA's `stylegan3`) with the latent-cinema features from the SG2-ADA / Schultz lineage ported on top — used as the engine for a data-driven generative-art / latent-cinema project.
 
-The training stack (`deepVogue/train.py`, `deepVogue/training/{training_loop,dataset,loss,augment,networks_stylegan2,networks_stylegan3}.py`, `deepVogue/pytorch_utils/`) is vendored from upstream NVlabs/stylegan3. The legacy SG2-ADA training files are preserved as `*_legacy.py` for reference (not imported), and `deepVogue/training/networks.py` (original SG2-ADA Generator) is kept solely so old `.pkl` checkpoints unpickle correctly through `legacy.py`. Inference/art scripts (projector, walk, factors, blend, cinema) are deepVogue-specific and being adapted to the SG3 generator (Phase 4).
+The training stack (`deepVogue/train.py`, `deepVogue/training/{training_loop,dataset,loss,augment,networks_stylegan2,networks_stylegan3}.py`, `deepVogue/pytorch_utils/`) is vendored from upstream NVlabs/stylegan3. The legacy SG2-ADA training files are preserved as `*_legacy.py` for reference (not imported), and `deepVogue/training/networks.py` (original SG2-ADA Generator) is kept solely so old `.pkl` checkpoints unpickle correctly through `legacy.py`. Inference/art scripts (projector, walk, factors, blend, cinema) are deepVogue-specific and adapted to the SG3 generator; only Z-space `generate.py` retains SG2-era Schultz features.
 
 ### Artistic / Research Vision (project intent)
 
@@ -68,7 +68,7 @@ Endpoints: `GET /health`, `GET /models`, `GET /status?model=<id>`, `POST /genera
 
 The canonical entry point is `notebooks/deepVogue_colab.ipynb` (cells 00–07: setup → configure → prepare → train → project anchors → walk → factors → eval). Every step in the notebook is a `make` target — the notebook just sets `DV_*` env vars and calls `!make <target>`. The same commands run locally.
 
-**Bootstrap on Colab is GitHub-clone**: `git clone --depth 1 --branch master $GITHUB_URL /content/deepVogue` followed by `make colab-install` (which `pip install -e .`s the repo and apt-installs ffmpeg). Drive holds *data and outputs only* (`/MyDrive/deepVogue/{data,datasets,runs,anchors,walks}/...`); the code is never zipped onto Drive.
+**Bootstrap on Colab is GitHub-clone**: `git clone --depth 1 --branch master $GITHUB_URL /content/deepVogue` followed by `make colab-install` (which `pip install -e .`s the repo with train+serve+bot requirements and apt-installs ffmpeg). Drive holds *data and outputs only* (`/MyDrive/deepVogue/{data,datasets,runs,anchors,walks}/...`); the code is never zipped onto Drive.
 
 ## Common Commands
 
@@ -78,7 +78,7 @@ The `Makefile` is the canonical entry point for repo housekeeping; ML workflows 
 # install
 pip install -e .                              # local / inference only
 pip install -e . -r requirements-train.txt    # full training stack
-make colab-install                            # what notebook cell 00 runs (pip install -e . + apt-get ffmpeg)
+make colab-install                            # what notebook cell 00 runs (pip install -e . + train/serve/bot reqs + apt-get ffmpeg)
 make colab-clone DV_GITHUB_URL=<url>          # clones repo into /content/deepVogue
 
 # repo housekeeping
@@ -188,6 +188,6 @@ The `dataset_tool.py` file at top level (NVIDIA's official `convert_dataset` CLI
 
 ## Conventions specific to this repo
 
-- Network checkpoints are `.pkl` files containing the full module (via `pytorch_utils/persistence.py`); they embed source code, so loading old pickles requires `legacy.py`.
+- Network checkpoints are `.pkl` files containing the full module (via `pytorch_utils/persistence.py`); they embed source code, so loading old pickles requires `legacy.py`. `legacy.py` aliases `torch_utils`/`dnnlib` in `sys.modules` so official NVlabs pretrained pkls unpickle despite this repo's package renames; TF1-era pkls are unsupported (the intercept targets a stale module name).
 - Output artifacts go under `results/` (`results/checkpoints/`, `results/snapshots/`) and `deepVogue/results/` — `make clean` will wipe these, so don't keep anything precious there.
 - The audio-reactive / latent-walk notebooks rely on `OpenSimplex` (already in `generate.py`'s `OSN` class) for smooth noise trajectories. Reuse `OSN` rather than rolling new noise generators when adding walk modes.

@@ -1,9 +1,10 @@
 # deepVogue — training dependencies (Colab GPU runtime).
 # Install on top of requirements.txt:  pip install -r requirements-train.txt
 
-torch>=1.9,<2.2
+torch>=1.9         # no upper bound: keep Colab's preinstalled 2.x (conv2d_gradfix falls back cleanly)
 torchvision
-pyspng==0.1.0
+# pyspng intentionally omitted: optional PNG fast-path, fails to build on
+# py3.12; training/dataset.py falls back to PIL when absent.
 pandas
 scikit-learn
 librosa            # audio-reactive walks

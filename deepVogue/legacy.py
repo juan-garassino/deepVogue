@@ -10,10 +10,51 @@ import click
 import pickle
 import re
 import copy
+import sys
 import numpy as np
 import torch
 from deepVogue import neuronal_network_utils
+from deepVogue import pytorch_utils
 from deepVogue.pytorch_utils import misc
+from deepVogue.pytorch_utils import custom_ops, persistence, training_stats
+from deepVogue.pytorch_utils import ops as _ops
+from deepVogue.pytorch_utils.ops import (
+    bias_act,
+    conv2d_gradfix,
+    conv2d_resample,
+    filtered_lrelu,
+    fma,
+    grid_sample_gradfix,
+    upfirdn2d,
+)
+
+# ----------------------------------------------------------------------------
+# Official NVlabs pkls embed source importing torch_utils.* / dnnlib.*; this
+# repo renamed those packages, so alias them or unpickling raises
+# ModuleNotFoundError. setdefault: a real upstream checkout on PYTHONPATH wins.
+# Each ops submodule is aliased explicitly so the embedded source reuses the
+# already-imported module objects instead of re-importing duplicates (which
+# would double-init the CUDA JIT plugin cache).
+
+_ALIASES = {
+    "torch_utils": pytorch_utils,
+    "torch_utils.misc": misc,
+    "torch_utils.persistence": persistence,
+    "torch_utils.training_stats": training_stats,
+    "torch_utils.custom_ops": custom_ops,
+    "torch_utils.ops": _ops,
+    "torch_utils.ops.bias_act": bias_act,
+    "torch_utils.ops.conv2d_gradfix": conv2d_gradfix,
+    "torch_utils.ops.conv2d_resample": conv2d_resample,
+    "torch_utils.ops.filtered_lrelu": filtered_lrelu,
+    "torch_utils.ops.fma": fma,
+    "torch_utils.ops.grid_sample_gradfix": grid_sample_gradfix,
+    "torch_utils.ops.upfirdn2d": upfirdn2d,
+    "dnnlib": neuronal_network_utils,
+    "dnnlib.util": neuronal_network_utils.util,
+}
+for _name, _mod in _ALIASES.items():
+    sys.modules.setdefault(_name, _mod)
 
 # ----------------------------------------------------------------------------
 
