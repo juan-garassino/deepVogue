@@ -169,16 +169,18 @@ The package is the StyleGAN2-ADA-PyTorch codebase split into purpose-named subpa
 
 3. **`deepVogue/neuronal_network_utils/`** and **`deepVogue/generative_network_utils/`** — fork-added helpers (`util.py`, `utilgan.py`) used by the inference/art scripts; expect lots of dnnlib-style helpers (EasyDict, formatting, file I/O).
 
-4. **`deepVogue/dataset_tool/`** — image preprocessing into the zip format expected by `training/dataset.py`.
+4. **`deepVogue/_runtime.py`** — shared inference runtime: `pick_device()`, `load_generator(pkl)` (→ G_ema, eval, grads off), `to_uint8_hwc(img)`, `open_video_writer(path, fps)` (forces the FFMPEG backend). walk/cinema/serve all go through it; new inference code should too. torch/imageio import lazily inside the functions.
 
-5. **Top-level scripts** — every "verb" is a click-decorated CLI. Mental model:
+5. **`deepVogue/dataset_tool/`** — image preprocessing into the zip format expected by `training/dataset.py`.
+
+6. **Top-level scripts** — every "verb" is a click-decorated CLI. Mental model:
    - **Train:** `train.py` → `training_loop.py`.
    - **Sample:** `generate.py`, `style_mixing.py`, `flesh_digression.py`.
    - **Invert (image → latent):** `projector.py`, `pbaylies_projector.py`. These produce the W/W+ vectors that the *latent cinema* idea anchors on.
    - **Edit (latent → latent):** `closed_form_factorization.py` + `apply_factor.py` (SeFa-style), `blend_models.py` (layer-swap two checkpoints), `combine_npz.py`.
    - **Export / interop:** `legacy.py` (load older TF/PT pickles), `export_weights.py` (push weights to other formats), `SG2_ADA_PT_to_Rosinality.ipynb`.
 
-6. **`notebooks/`** — exploratory & artistic. `SG2-ADA-PT_AudioReactive+Pitch.ipynb` and `Network_Blending_ADA_PT.ipynb` are the closest existing prototypes for the latent-cinema/installation direction; new artistic experiments should start as notebooks here before being promoted to scripts.
+7. **`notebooks/`** — exploratory & artistic. `SG2-ADA-PT_AudioReactive+Pitch.ipynb` and `Network_Blending_ADA_PT.ipynb` are the closest existing prototypes for the latent-cinema/installation direction; new artistic experiments should start as notebooks here before being promoted to scripts.
 
 ### Imports
 
