@@ -16,6 +16,14 @@ from .schemas import GenerateRequest, WalkRequest
 
 def _warm_models(registry: Registry) -> None:
     """Pre-load the first two registered models so first request isn't cold."""
+    # IAP id-token refresher for IAP-fronted MLflow. No-op without env config.
+    try:
+        from deepVogue.tracking.iap import start_iap_token_refresher
+
+        start_iap_token_refresher()
+    except Exception as e:
+        print(f"[serve] iap refresher skipped: {e}")
+
     try:
         entries = registry.list()[:2]
     except Exception as e:
@@ -51,38 +59,47 @@ def status(model: str, last_n: int = 5) -> JSONResponse:
     """Tail metric-fid50k_full.jsonl for the registered model.
 
     Returns the last `last_n` FID rows and the highest-kimg snapshot path.
-    `model` must be a registered id (the run is discovered from
-    `<pkl-parent>/metric-fid50k_full.jsonl`).
+    `model` must be a registered id; the FID log is discovered as
+    `<pkl-parent>/metric-fid50k_full.jsonl` via fsspec so it works for
+    `s3://`, `gs://`, `memory://`, or plain local paths.
     """
     import json
+    import fsspec
     from deepVogue._paths import latest_snapshot
+
     try:
         entry = _registry.get(model)
     except KeyError:
         raise HTTPException(404, f"unknown model: {model}")
-    pkl_path = Path(entry.pkl)
-    run_dir = pkl_path.parent
-    log = run_dir / "metric-fid50k_full.jsonl"
-    if not log.exists():
-        # fall back to any FID log under run_dir
-        log = next(run_dir.rglob("metric-fid50k_full.jsonl"), None)
+    pkl_uri = entry.pkl_resolved or entry.pkl
+    jsonl_uri = f"{pkl_uri.rsplit('/', 1)[0]}/metric-fid50k_full.jsonl"
     rows = []
-    if log and log.exists():
-        for line in log.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-    latest = latest_snapshot(entry.id) if entry.dataset_kind in ("stills", "frames") else None
-    return JSONResponse({
-        "model": model,
-        "pkl": str(pkl_path),
-        "latest_snapshot": str(latest) if latest else None,
-        "fid_rows": rows[-last_n:],
-    })
+    try:
+        with fsspec.open(jsonl_uri, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    except (FileNotFoundError, OSError):
+        # No FID log yet (or unreachable backend) — return empty rows.
+        rows = []
+    latest = (
+        latest_snapshot(entry.id)
+        if entry.dataset_kind in ("stills", "frames")
+        else None
+    )
+    return JSONResponse(
+        {
+            "model": model,
+            "pkl": pkl_uri,
+            "latest_snapshot": str(latest) if latest else None,
+            "fid_rows": rows[-last_n:],
+        }
+    )
 
 
 @app.get("/models")
@@ -97,8 +114,11 @@ def generate(req: GenerateRequest):
     except KeyError:
         raise HTTPException(404, f"unknown model: {req.model}")
     png = loader.generate(
-        entry, seed=req.seed, trunc=req.trunc,
-        factor_idx=req.factor_idx, factor_amp=req.factor_amp,
+        entry,
+        seed=req.seed,
+        trunc=req.trunc,
+        factor_idx=req.factor_idx,
+        factor_amp=req.factor_amp,
     )
     return Response(content=png, media_type="image/png")
 
@@ -112,8 +132,12 @@ def walk(req: WalkRequest):
     if len(req.seeds) < 2:
         raise HTTPException(400, "walk needs ≥2 seeds")
     mp4 = loader.walk(
-        entry, seeds=req.seeds, steps=req.steps, fps=req.fps,
-        mode=req.mode, trunc=req.trunc,
+        entry,
+        seeds=req.seeds,
+        steps=req.steps,
+        fps=req.fps,
+        mode=req.mode,
+        trunc=req.trunc,
     )
     return Response(content=mp4, media_type="video/mp4")
 
@@ -136,7 +160,9 @@ def _resolve_film_path(model_id: str, walk_id: str) -> Path:
         entry = None
     if walks_root is None:
         env = os.environ.get("DV_WALKS_DIR")
-        walks_root = (Path(env) / model_id) if env else (Path("/tmp/deepVogue/walks") / model_id)
+        walks_root = (
+            (Path(env) / model_id) if env else (Path("/tmp/deepVogue/walks") / model_id)
+        )
     candidate = walks_root / walk_id
     if candidate.suffix != ".mp4":
         candidate = candidate.with_suffix(".mp4")

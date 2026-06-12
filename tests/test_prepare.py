@@ -1,4 +1,5 @@
 """Smoke test: deepvogue-prepare CLI registers both subcommands and validates input."""
+
 from click.testing import CliRunner
 from deepVogue.dataset_tool.prepare import cli
 
@@ -16,7 +17,8 @@ def test_stills_missing_source(tmp_path, monkeypatch):
 
 
 def test_frames_no_videos(tmp_path, monkeypatch):
-    src = tmp_path / "data"; src.mkdir()
+    src = tmp_path / "data"
+    src.mkdir()
     monkeypatch.setenv("DV_DATA_DIR", str(src))
     monkeypatch.setenv("DV_DATASET_DIR", str(tmp_path / "out"))
     res = CliRunner().invoke(cli, ["frames", "--resolution", "64", "--fps", "1"])

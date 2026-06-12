@@ -4,8 +4,16 @@ from deepVogue import _paths
 
 
 def test_resolve_defaults_to_tmp(monkeypatch):
-    for k in ("DV_DATA_DIR", "DV_DATASET_DIR", "DV_RUN_DIR", "DV_DRIVE_SYNC",
-              "DV_NETWORK_PKL", "DV_ANCHORS_DIR", "DV_WALKS_DIR", "DV_DATASET_NAME"):
+    for k in (
+        "DV_DATA_DIR",
+        "DV_DATASET_DIR",
+        "DV_RUN_DIR",
+        "DV_DRIVE_SYNC",
+        "DV_NETWORK_PKL",
+        "DV_ANCHORS_DIR",
+        "DV_WALKS_DIR",
+        "DV_DATASET_NAME",
+    ):
         monkeypatch.delenv(k, raising=False)
     p = _paths.resolve()
     assert str(p.run_dir).startswith("/tmp/")
@@ -48,8 +56,10 @@ def test_dataset_name_scopes_paths(monkeypatch, tmp_path):
 
 def test_latest_snapshot_picks_highest_kimg(monkeypatch, tmp_path):
     runs = tmp_path / "runs" / "tarot"
-    r1 = runs / "00000-tarot"; r1.mkdir(parents=True)
-    r2 = runs / "00001-tarot"; r2.mkdir(parents=True)
+    r1 = runs / "00000-tarot"
+    r1.mkdir(parents=True)
+    r2 = runs / "00001-tarot"
+    r2.mkdir(parents=True)
     (r1 / "network-snapshot-000100.pkl").write_text("a")
     (r2 / "network-snapshot-000200.pkl").write_text("b")
     (r2 / "network-snapshot-000150.pkl").write_text("c")

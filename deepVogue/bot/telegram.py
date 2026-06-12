@@ -51,6 +51,7 @@ def _parse_kv(tokens: List[str]) -> Tuple[List[str], Dict[str, str]]:
 # command handlers — bound to python-telegram-bot v20 Application below
 # ---------------------------------------------------------------------------
 
+
 async def _is_allowed(update) -> bool:
     al = _allowlist()
     if not al:
@@ -76,6 +77,7 @@ async def cmd_models(update, ctx):
     if not await _is_allowed(update):
         return
     import httpx
+
     async with httpx.AsyncClient(timeout=30) as cli:
         r = await cli.get(f"{_api_url()}/models")
     if r.status_code != 200:
@@ -103,10 +105,13 @@ async def cmd_gen(update, ctx):
     if "trunc" in kv:
         payload["trunc"] = float(kv["trunc"])
     import httpx
+
     async with httpx.AsyncClient(timeout=120) as cli:
         r = await cli.post(f"{_api_url()}/generate", json=payload)
     if r.status_code != 200:
-        return await update.message.reply_text(f"server: HTTP {r.status_code} {r.text[:200]}")
+        return await update.message.reply_text(
+            f"server: HTTP {r.status_code} {r.text[:200]}"
+        )
     await update.message.reply_photo(photo=r.content)
 
 
@@ -128,12 +133,17 @@ async def cmd_walk(update, ctx):
     }
     if "trunc" in kv:
         payload["trunc"] = float(kv["trunc"])
-    await update.message.reply_text(f"rendering walk ({len(seeds)} anchors × {payload['steps']} steps)…")
+    await update.message.reply_text(
+        f"rendering walk ({len(seeds)} anchors × {payload['steps']} steps)…"
+    )
     import httpx
+
     async with httpx.AsyncClient(timeout=600) as cli:
         r = await cli.post(f"{_api_url()}/walk", json=payload)
     if r.status_code != 200:
-        return await update.message.reply_text(f"server: HTTP {r.status_code} {r.text[:200]}")
+        return await update.message.reply_text(
+            f"server: HTTP {r.status_code} {r.text[:200]}"
+        )
     await update.message.reply_video(video=r.content)
 
 
@@ -145,10 +155,13 @@ async def cmd_film(update, ctx):
         return await update.message.reply_text("usage: /film <model> <walk_id>")
     model, walk_id = pos[0], pos[1]
     import httpx
+
     async with httpx.AsyncClient(timeout=600) as cli:
         r = await cli.get(f"{_api_url()}/films/{model}/{walk_id}")
     if r.status_code != 200:
-        return await update.message.reply_text(f"server: HTTP {r.status_code} {r.text[:200]}")
+        return await update.message.reply_text(
+            f"server: HTTP {r.status_code} {r.text[:200]}"
+        )
     await update.message.reply_video(video=r.content)
 
 
@@ -160,10 +173,15 @@ async def cmd_status(update, ctx):
         return await update.message.reply_text("usage: /status <model> [last_n=5]")
     last_n = int(kv.get("last_n", 5))
     import httpx
+
     async with httpx.AsyncClient(timeout=30) as cli:
-        r = await cli.get(f"{_api_url()}/status", params={"model": pos[0], "last_n": last_n})
+        r = await cli.get(
+            f"{_api_url()}/status", params={"model": pos[0], "last_n": last_n}
+        )
     if r.status_code != 200:
-        return await update.message.reply_text(f"server: HTTP {r.status_code} {r.text[:200]}")
+        return await update.message.reply_text(
+            f"server: HTTP {r.status_code} {r.text[:200]}"
+        )
     data = r.json()
     lines = [f"model: {data['model']}"]
     if data.get("latest_snapshot"):
@@ -186,7 +204,9 @@ async def cmd_factor(update, ctx):
         return
     pos, kv = _parse_kv(ctx.args)
     if not pos or "idx" not in kv:
-        return await update.message.reply_text("usage: /factor <model> seed=N idx=K deg=0.4")
+        return await update.message.reply_text(
+            "usage: /factor <model> seed=N idx=K deg=0.4"
+        )
     payload = {
         "model": pos[0],
         "seed": int(kv.get("seed", 0)),
@@ -196,16 +216,20 @@ async def cmd_factor(update, ctx):
     if "trunc" in kv:
         payload["trunc"] = float(kv["trunc"])
     import httpx
+
     async with httpx.AsyncClient(timeout=120) as cli:
         r = await cli.post(f"{_api_url()}/generate", json=payload)
     if r.status_code != 200:
-        return await update.message.reply_text(f"server: HTTP {r.status_code} {r.text[:200]}")
+        return await update.message.reply_text(
+            f"server: HTTP {r.status_code} {r.text[:200]}"
+        )
     await update.message.reply_photo(photo=r.content)
 
 
 # ---------------------------------------------------------------------------
 # entrypoint
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     token = os.environ.get("DV_TG_TOKEN")

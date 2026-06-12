@@ -1,0 +1,76 @@
+name: build-prefect
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'infra/docker/prefect/**'
+      - 'infra/cloudrun/prefect-server.service.yaml'
+      - 'infra/cloudrun/prefect-worker.job.yaml'
+      - 'deepVogue/orchestration/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    env:
+      REGION: europe-west1
+      SERVER_IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/prefect-server
+      WORKER_IMAGE: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/deepvogue/prefect-worker
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+      - name: Build server
+        run: |
+          docker build -f infra/docker/prefect/Dockerfile --build-arg TARGET=server \
+            -t $SERVER_IMAGE:${{ github.sha }} -t $SERVER_IMAGE:latest .
+          docker push $SERVER_IMAGE:${{ github.sha }}
+          docker push $SERVER_IMAGE:latest
+      - name: Build worker
+        run: |
+          docker build -f infra/docker/prefect/Dockerfile --build-arg TARGET=worker \
+            -t $WORKER_IMAGE:${{ github.sha }} -t $WORKER_IMAGE:latest .
+          docker push $WORKER_IMAGE:${{ github.sha }}
+          docker push $WORKER_IMAGE:latest
+      - name: Deploy server
+        run: |
+          sed "s|PROJECT_ID|${{ secrets.GCP_PROJECT }}|g; s|prefect-server:latest|prefect-server:${{ github.sha }}|g" infra/cloudrun/prefect-server.service.yaml | \
+            gcloud run services replace - --region=$REGION --project=${{ secrets.GCP_PROJECT }}
+      - name: Deploy worker job
+        run: |
+          sed "s|PROJECT_ID|${{ secrets.GCP_PROJECT }}|g; s|prefect-worker:latest|prefect-worker:${{ github.sha }}|g" infra/cloudrun/prefect-worker.job.yaml | \
+            gcloud run jobs replace - --region=$REGION --project=${{ secrets.GCP_PROJECT }}
+      - if: success()
+        uses: slackapi/slack-github-action@v1.27.0
+        with: { payload: '{"text":":white_check_mark: prefect server + worker deployed @ ${{ github.sha }}"}' }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: success()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "✅ prefect server + worker deployed @ ${{ github.sha }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with: { payload: '{"text":":x: prefect build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ prefect build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

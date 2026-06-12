@@ -1,0 +1,85 @@
+name: build-train
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mlops/v1, master]
+    paths:
+      - 'infra/docker/train/**'
+      - 'deepVogue/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - '.github/workflows/build-train.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/deepvogue-train
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lowercase image name
+        id: img
+        run: echo "image=$(echo $IMAGE | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/train/Dockerfile
+          push: true
+          load: false
+          tags: |
+            ${{ steps.img.outputs.image }}:${{ github.sha }}
+            ${{ steps.img.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke (DV_FAKE_TRAIN=1; no GPU required)
+        run: |
+          docker pull ${{ steps.img.outputs.image }}:${{ github.sha }}
+          docker run --rm \
+            -e DV_FAKE_TRAIN=1 \
+            -e DV_KIMG=10 \
+            ${{ steps.img.outputs.image }}:${{ github.sha }} \
+            > smoke.log 2>&1 || (cat smoke.log; exit 1)
+          grep -q "fake-train done" smoke.log || (cat smoke.log; exit 1)
+          cat smoke.log
+      - name: Make package public (best-effort)
+        # No-op if already public; tolerates user-vs-org account difference.
+        run: |
+          gh api -X PATCH \
+            "/user/packages/container/deepvogue-train/visibility" \
+            -f visibility=public 2>/dev/null \
+            || gh api -X PATCH \
+              "/orgs/${{ github.repository_owner }}/packages/container/deepvogue-train/visibility" \
+              -f visibility=public 2>/dev/null \
+            || echo "package visibility patch skipped (likely already public)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - if: success()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "✅ build-train pushed ${{ steps.img.outputs.image }}:${{ github.sha }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with: { payload: '{"text":":x: build-train failed"}' }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ build-train failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

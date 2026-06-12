@@ -7,6 +7,7 @@ import threading
 from collections import OrderedDict
 from typing import List, Optional
 
+import fsspec
 import numpy as np
 
 from .registry import ModelEntry
@@ -41,28 +42,54 @@ _CACHE = _Cache(capacity=2)
 # .pkl → G_ema
 # ---------------------------------------------------------------------------
 
+
+def _load_pkl(pkl_uri: str):
+    """Load a StyleGAN .pkl from any fsspec-supported URI (gs://, s3://, local);
+    return G_ema on device, eval mode."""
+    from deepVogue import legacy
+    from deepVogue._runtime import pick_device
+
+    device = pick_device()
+    with fsspec.open(pkl_uri, "rb") as f:
+        G = legacy.load_network_pkl(f)["G_ema"]
+    return G.requires_grad_(False).eval().to(device)
+
+
 def load(entry: ModelEntry):
-    from deepVogue._runtime import load_generator
-    return _CACHE.get_or_load(entry.id, lambda: load_generator(entry.pkl))
+    uri = entry.pkl_resolved or entry.pkl
+    return _CACHE.get_or_load(entry.id, lambda: _load_pkl(uri))
 
 
 # ---------------------------------------------------------------------------
 # forward wrappers
 # ---------------------------------------------------------------------------
 
+
 def _seed_to_w(G, seed: int, trunc: float, device):
     import torch
-    z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device).float()
+
+    z = (
+        torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim))
+        .to(device)
+        .float()
+    )
     w = G.mapping(z, None, truncation_psi=trunc)
     return w
 
 
-def generate(entry: ModelEntry, *, seed: int, trunc: Optional[float] = None,
-             factor_idx: Optional[int] = None, factor_amp: float = 0.0) -> bytes:
+def generate(
+    entry: ModelEntry,
+    *,
+    seed: int,
+    trunc: Optional[float] = None,
+    factor_idx: Optional[int] = None,
+    factor_amp: float = 0.0,
+) -> bytes:
     """Return PNG bytes for a single generated image."""
     import torch
     from PIL import Image
     from deepVogue._runtime import to_uint8_hwc
+
     G = load(entry)
     device = next(G.parameters()).device
     psi = entry.default_trunc if trunc is None else trunc
@@ -79,14 +106,22 @@ def generate(entry: ModelEntry, *, seed: int, trunc: Optional[float] = None,
     return buf.getvalue()
 
 
-def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
-         mode: str = "cubic", trunc: Optional[float] = None) -> bytes:
+def walk(
+    entry: ModelEntry,
+    *,
+    seeds: List[int],
+    steps: int,
+    fps: int,
+    mode: str = "cubic",
+    trunc: Optional[float] = None,
+) -> bytes:
     """Return mp4 bytes for a latent walk between seeds."""
     import os
     import tempfile
     import torch
     from deepVogue._runtime import open_video_writer, to_uint8_hwc
     from deepVogue.walk import _interpolate_anchors
+
     if len(seeds) < 2:
         raise ValueError("walk needs ≥2 seeds")
     G = load(entry)
@@ -94,7 +129,7 @@ def walk(entry: ModelEntry, *, seeds: List[int], steps: int, fps: int,
     psi = entry.default_trunc if trunc is None else trunc
     with torch.no_grad():
         ws = [
-            _seed_to_w(G, s, psi, device).cpu().numpy()[0]   # (num_ws, w_dim)
+            _seed_to_w(G, s, psi, device).cpu().numpy()[0]  # (num_ws, w_dim)
             for s in seeds
         ]
     anchors = np.stack(ws, axis=0)

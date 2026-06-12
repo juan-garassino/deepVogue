@@ -98,6 +98,81 @@ make film FILM_ID=opening_scene DV_PROJ_STRIDE=4 DV_PROJ_STEPS=500
 make test
 ```
 
+## Local nano-mode (MLOps stack)
+
+Bring up an end-to-end stack on your laptop in two commands:
+
+```bash
+cp infra/.env.example infra/.env
+make nano-up        # postgres + minio + mlflow + prefect + fastapi
+make nano-smoke     # run pipeline_stills end-to-end (mocked train/walk on Mac)
+make nano-down
+```
+
+Endpoints: MLflow http://localhost:5000 · Prefect http://localhost:4200 · FastAPI http://localhost:8080 · MinIO http://localhost:9001
+
+## RunPod training
+
+For GPU training without Colab, submit a pod that pulls the dataset from GCS, trains, mirrors snapshots, and publishes via the same `models.yaml`:
+
+```bash
+# 0. one-time auth setup (after `make gcp-setup` has provisioned deepvogue-trainer-sa)
+gcloud iam service-accounts keys create trainer-key.json \
+  --iam-account=deepvogue-trainer-sa@$GCP_PROJECT.iam.gserviceaccount.com
+export RUNPOD_API_KEY=...                    # from runpod.io/console/user/settings
+export GOOGLE_APPLICATION_CREDENTIALS_JSON="$(cat trainer-key.json)"
+
+# 1. build + push the train image (or rely on the build-train workflow,
+#    which also makes the GHCR package public so RunPod can pull it)
+make runpod-push                              # tags ghcr.io/<owner>/deepvogue-train:latest
+
+# 2. fill in the rest of the env from infra/.env.example
+cp infra/.env.example infra/.env && $EDITOR infra/.env && set -a && . infra/.env && set +a
+
+# 3. submit
+make runpod-train MODEL_ID=tarot DV_KIMG=5000 DV_GAMMA=2 DV_BATCH=32 DV_RES=512
+
+# Ops
+make runpod-status    POD_ID=<id>
+make runpod-logs      POD_ID=<id>
+make runpod-terminate POD_ID=<id>
+```
+
+The pod runs `infra/docker/train/entrypoint.sh`: gcloud SA activation → GPU + custom-ops warmup → `gsutil cp` dataset → background `gsutil rsync` of run dir → `deepVogue/train.py` → `python -m deepVogue.publish` → self-terminate via RunPod GraphQL. Failures route to Slack if `SLACK_WEBHOOK_URL` is set.
+
+## GCP show-and-destroy
+
+The stack lives in **`garassino-ml`** and federates auth from **`garassino-op`** (control plane: WIF, TF state, Secret Manager, log sink). Full runbook — cold-start sequence, daily ops, training paths, failure modes, architecture decisions, cost expectations — in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
+```bash
+# 1. One-time op bootstrap (creates WIF pool + secrets + TF state bucket)
+GCP_PROJECT=garassino-op GITHUB_REPO=<owner>/deepvogue make gcp-setup-op
+
+# 2. One-time ml setup (runtime SAs, AR repo, cross-project WIF binding, monitoring, €25 budget)
+export GCP_PROJECT=garassino-ml GITHUB_REPO=<owner>/deepvogue
+make gcp-setup
+
+# 3. Mint a Neon project (free tier) → grab the two DSNs, then:
+NEON_MLFLOW_DSN='postgresql://...' NEON_PREFECT_DSN='postgresql://...' make deploy-db-secrets
+
+# 4. Demo cycle
+make show                           # builds + deploys mlflow, prefect, inference, monitoring
+# … run the demo …
+make destroy                        # tears down runtime; preserves data + images + IAM
+```
+
+`make show` prints the live Cloud Run URLs. `make destroy` stops Cloud SQL via `--activation-policy=NEVER` (free, data preserved); re-running `make show` restarts it. Buckets, Artifact Registry images, IAM bindings, and service accounts are *never* deleted by `destroy`.
+
+After the first `make gcp-setup`, register the outputs printed by `setup-iam.sh` as GitHub repo secrets: `GCP_PROJECT`, `GCP_WIF_PROVIDER` (points at `garassino-op`'s pool), `GCP_DEPLOYER_SA`, `SLACK_WEBHOOK_URL`, plus `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` if you want CI pings.
+
+## Monitoring
+
+```bash
+SLACK_WEBHOOK_URL=... make deploy-monitoring
+```
+
+Provisions uptime checks on each Cloud Run service's `/health` plus alert policies (uptime, 5xx, Cloud SQL CPU) routed to a Slack webhook channel.
+
 ## License
 
 StyleGAN3 and StyleGAN2-ADA code under NVIDIA's source-code license; everything

@@ -1,0 +1,23 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.idea
+.DS_Store
+
+# Large local-only artifacts
+results/
+deepVogue/results/
+*.mp4
+*.pkl
+# Keep the stub fixture used by DV_FAKE_TRAIN=1
+!tests/fixtures/stub_sg3_state_dict.pt
+
+# Notebooks aren't needed at runtime
+notebooks/
+
+# Other docker contexts shouldn't leak into this one
+infra/docker/inference/
+infra/docker/mlflow/
+infra/docker/prefect/

@@ -302,3 +302,171 @@ count_lines:
         project-frames walk walk-frames walk-stills \
         factors-discover walk-factor blend eval \
         pipeline-stills pipeline-frames env count_lines
+
+# === MLOps stack — local nano ===
+.PHONY: nano-up nano-down nano-logs nano-smoke
+
+NANO_COMPOSE := docker compose -f infra/docker-compose.yml --env-file infra/.env
+
+nano-up: ## Bring up local MLOps stack (postgres + minio + mlflow + prefect + fastapi)
+	@test -f infra/.env || (echo "create infra/.env first: cp infra/.env.example infra/.env" && exit 1)
+	$(NANO_COMPOSE) up -d --build
+	@echo "MLflow:   http://localhost:5000"
+	@echo "Prefect:  http://localhost:4200"
+	@echo "FastAPI:  http://localhost:8080"
+	@echo "MinIO:    http://localhost:9001"
+
+nano-down:
+	$(NANO_COMPOSE) down -v
+
+nano-logs:
+	$(NANO_COMPOSE) logs -f --tail=200
+
+nano-smoke: ## Run the local-nano integration smoke against a running stack
+	python scripts/run_nano_smoke.py
+
+# === MLOps stack — GCP deploy ===
+.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget deploy-db-secrets gcp-setup gcp-setup-op publish publish-dataset show destroy
+
+GCP_REGION ?= europe-west1
+GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
+
+publish: ## Publish latest Drive snapshot for DV_DATASET_NAME to DV_PUBLISH_TARGET as MODEL_ID
+	@test -n "$(MODEL_ID)" || (echo "usage: make publish MODEL_ID=<id> [DV_DATASET_NAME=<name>]" && exit 1)
+	python -m deepVogue.publish --model-id=$(MODEL_ID) \
+	  --src-dir=$${DV_DRIVE_SYNC:?set DV_DRIVE_SYNC}/$${DV_DATASET_NAME:-default}
+
+publish-dataset: ## Upload Drive dataset.zip → GCS so RunPod/Vertex can train on it (DATASET=<name>)
+	@test -n "$(DATASET)" || (echo "usage: make publish-dataset DATASET=<name> DV_DATASET_DIR=<drive path> [DV_DATASET_GCS_ROOT=gs://deepvogue-datasets]" && exit 1)
+	python -m deepVogue.publish dataset --name=$(DATASET) \
+	  --src-dir=$${DV_DATASET_DIR:?set DV_DATASET_DIR}
+
+deploy-inference:
+	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)
+	sed "s|PROJECT_ID|$(GCP_PROJECT)|g" infra/cloudrun/inference.service.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
+
+deploy-mlflow:
+	@OP_NUMBER=$$(gcloud projects describe $${GCP_OP_PROJECT:-garassino-op} --format='value(projectNumber)' 2>/dev/null); \
+	test -n "$$OP_NUMBER" || (echo "could not resolve garassino-op project number; run \`make gcp-setup-op\` first" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|OP_PROJECT_NUMBER|$$OP_NUMBER|g" \
+	  infra/cloudrun/mlflow.service.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
+
+deploy-prefect:
+	@OP_NUMBER=$$(gcloud projects describe $${GCP_OP_PROJECT:-garassino-op} --format='value(projectNumber)' 2>/dev/null); \
+	test -n "$$OP_NUMBER" || (echo "could not resolve garassino-op project number; run \`make gcp-setup-op\` first" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|OP_PROJECT_NUMBER|$$OP_NUMBER|g" \
+	  infra/cloudrun/prefect-server.service.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run services replace - --region=$(GCP_REGION)
+	@SERVER_URL=$$(gcloud --project=$(GCP_PROJECT) run services describe deepvogue-prefect-server \
+	  --region=$(GCP_REGION) --format='value(status.url)'); \
+	test -n "$$SERVER_URL" || (echo "could not resolve prefect-server URL" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|PREFECT_SERVER_URL|$$SERVER_URL|g" \
+	  infra/cloudrun/prefect-worker.job.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run jobs replace - --region=$(GCP_REGION)
+
+gcp-setup-op: ## One-time: bootstrap garassino-op (WIF + TF state + log sink + secrets)
+	@test -n "$$GITHUB_REPO" || (echo "set GITHUB_REPO=owner/repo" && exit 1)
+	GCP_PROJECT=$${GCP_OP_PROJECT:-garassino-op} bash infra/gcp/setup-op.sh
+
+gcp-setup:
+	bash infra/gcp/setup.sh
+	bash infra/gcp/setup-iam.sh
+	bash infra/gcp/setup-db-secrets.sh || echo "db-secrets skipped (NEON_*_DSN not set; re-run \`make deploy-db-secrets\` later)"
+	bash infra/gcp/setup-monitoring.sh || echo "monitoring setup failed; re-run \`make deploy-monitoring\` after deploying services"
+	bash infra/gcp/setup-budget.sh || echo "budget setup skipped (billing not linked yet?)"
+
+deploy-monitoring: ## Cloud Monitoring uptime + alerts (requires SLACK_WEBHOOK_URL)
+	bash infra/gcp/setup-monitoring.sh
+
+deploy-budget: ## €25/mo budget + 40/80/100% alerts on garassino-ml
+	bash infra/gcp/setup-budget.sh
+
+deploy-db-secrets: ## Push NEON_MLFLOW_DSN + NEON_PREFECT_DSN into op's Secret Manager
+	bash infra/gcp/setup-db-secrets.sh
+
+show: deploy-mlflow deploy-prefect deploy-inference deploy-monitoring ## Bring the stack up for a demo
+	@echo
+	@echo "Stack live in $(GCP_REGION):"
+	@gcloud --project=$(GCP_PROJECT) run services list --region=$(GCP_REGION) \
+	  --format='table(metadata.name,status.url)' 2>/dev/null || true
+
+destroy: ## Tear down runtime only — preserves buckets, AR images, IAM, SAs. Restart with `make show`.
+	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)
+	@for svc in deepvogue-inference deepvogue-mlflow deepvogue-prefect-server; do \
+	  echo "deleting service $$svc"; \
+	  gcloud --project=$(GCP_PROJECT) run services delete $$svc \
+	    --region=$(GCP_REGION) --quiet 2>/dev/null || true; \
+	done
+	@echo "deleting prefect-worker job"
+	gcloud --project=$(GCP_PROJECT) run jobs delete deepvogue-prefect-worker \
+	  --region=$(GCP_REGION) --quiet 2>/dev/null || true
+	@echo "Runtime torn down. Buckets + AR + IAM + Neon (external) preserved."
+
+# === RunPod training backend ===
+.PHONY: runpod-build runpod-push runpod-train runpod-status runpod-logs runpod-terminate runpod-stop \
+        vertex-push vertex-train vertex-status vertex-logs vertex-cancel
+
+# NB: no '#' inside the shell call — make treats it as a comment start and
+# truncates the line, leaving $(shell unterminated.
+RUNPOD_IMAGE ?= ghcr.io/$(shell git config --get remote.origin.url | sed -E 's@.*[:/]([^/]+/[^/.]+)(\.git)?@\1@' | tr '[:upper:]' '[:lower:]')-train
+RUNPOD_TAG ?= latest
+
+runpod-build: ## Build the GPU train image locally
+	docker build -f infra/docker/train/Dockerfile -t $(RUNPOD_IMAGE):$(RUNPOD_TAG) .
+
+runpod-push: runpod-build ## Push the train image to GHCR
+	docker push $(RUNPOD_IMAGE):$(RUNPOD_TAG)
+
+runpod-train: ## Submit a RunPod training job (env: DV_DATASET_URI, DV_RUN_URI, GOOGLE_APPLICATION_CREDENTIALS_JSON)
+	@test -n "$(MODEL_ID)" || (echo "usage: make runpod-train MODEL_ID=<id> DV_DATASET_URI=gs://... DV_RUN_URI=gs://..." && exit 1)
+	DV_MODEL_ID=$(MODEL_ID) python scripts/submit_train.py --backend=runpod --model-id=$(MODEL_ID)
+
+runpod-status: ## Print status of a pod: make runpod-status POD_ID=<id>
+	@test -n "$(POD_ID)" || (echo "usage: make runpod-status POD_ID=<id>" && exit 1)
+	python -c "import runpod, os, json; runpod.api_key=os.environ['RUNPOD_API_KEY']; print(json.dumps(runpod.get_pod('$(POD_ID)'), indent=2))"
+
+runpod-logs: ## Dump current logs of a pod: make runpod-logs POD_ID=<id>
+	@test -n "$(POD_ID)" || (echo "usage: make runpod-logs POD_ID=<id>" && exit 1)
+	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; \
+import sys; \
+fn = getattr(runpod, 'get_pod_logs', None); \
+sys.stdout.write(fn('$(POD_ID)') if fn else 'SDK lacks get_pod_logs; check https://www.runpod.io/console/pods')"
+
+runpod-terminate: ## Terminate (delete) a pod: make runpod-terminate POD_ID=<id>
+	@test -n "$(POD_ID)" || (echo "usage: make runpod-terminate POD_ID=<id>" && exit 1)
+	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; runpod.terminate_pod('$(POD_ID)'); print('terminated $(POD_ID)')"
+
+# ----------------------------------
+#  Vertex AI training (GCP-native ephemeral GPU; VM auto-released on exit)
+# ----------------------------------
+
+VERTEX_IMAGE ?= $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue/deepvogue-train
+VERTEX_TAG ?= latest
+
+vertex-push: runpod-build ## Tag + push the train image into Artifact Registry (Vertex must pull from AR)
+	@test -n "$(GCP_PROJECT)" || (echo "usage: make vertex-push GCP_PROJECT=garassino-ml" && exit 1)
+	docker tag $(RUNPOD_IMAGE):$(RUNPOD_TAG) $(VERTEX_IMAGE):$(VERTEX_TAG)
+	docker push $(VERTEX_IMAGE):$(VERTEX_TAG)
+
+vertex-train: ## Submit a Vertex AI training job (env: GCP_PROJECT, DV_DATASET_URI, DV_RUN_URI; no SA key needed)
+	@test -n "$(MODEL_ID)" || (echo "usage: make vertex-train MODEL_ID=<id> GCP_PROJECT=garassino-ml DV_DATASET_URI=gs://... DV_RUN_URI=gs://..." && exit 1)
+	DV_MODEL_ID=$(MODEL_ID) VERTEX_IMAGE=$(VERTEX_IMAGE):$(VERTEX_TAG) \
+	    python scripts/submit_train.py --backend=vertex --model-id=$(MODEL_ID)
+
+vertex-status: ## Describe a job: make vertex-status JOB=<custom-job resource name or numeric id>
+	@test -n "$(JOB)" || (echo "usage: make vertex-status JOB=<id>" && exit 1)
+	gcloud ai custom-jobs describe "$(JOB)" --project=$(GCP_PROJECT) --region=$(GCP_REGION)
+
+vertex-logs: ## Stream logs of a job: make vertex-logs JOB=<id>
+	@test -n "$(JOB)" || (echo "usage: make vertex-logs JOB=<id>" && exit 1)
+	gcloud ai custom-jobs stream-logs "$(JOB)" --project=$(GCP_PROJECT) --region=$(GCP_REGION)
+
+vertex-cancel: ## Cancel a running job: make vertex-cancel JOB=<id>
+	@test -n "$(JOB)" || (echo "usage: make vertex-cancel JOB=<id>" && exit 1)
+	gcloud ai custom-jobs cancel "$(JOB)" --project=$(GCP_PROJECT) --region=$(GCP_REGION)
+
+runpod-stop: ## Pause a pod (still bills volume): make runpod-stop POD_ID=<id>
+	@test -n "$(POD_ID)" || (echo "usage: make runpod-stop POD_ID=<id>" && exit 1)
+	python -c "import runpod, os; runpod.api_key=os.environ['RUNPOD_API_KEY']; runpod.stop_pod('$(POD_ID)'); print('stopped $(POD_ID)')"

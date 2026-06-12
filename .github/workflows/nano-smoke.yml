@@ -1,0 +1,46 @@
+name: nano-smoke
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * *"  # 05:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -e . -r requirements-orchestration.txt pytest
+      - name: Build stub state dict
+        run: python scripts/build_stub_state_dict.py
+      - name: Prepare env
+        run: cp infra/.env.example infra/.env
+      - name: nano-up
+        run: make nano-up
+      - name: nano-smoke
+        run: make nano-smoke
+      - name: nano-down
+        if: always()
+        run: make nano-down
+      - name: Slack on fail
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: '{"text":":x: nano-smoke failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Telegram on fail
+        if: failure()
+        uses: ./.github/actions/notify-telegram
+        with:
+          text: "❌ nano-smoke failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

@@ -1,0 +1,25 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: deepvogue-prefect-worker
+spec:
+  template:
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: prefect-worker-sa@PROJECT_ID.iam.gserviceaccount.com
+          maxRetries: 1
+          timeoutSeconds: 3600
+          containers:
+            - image: europe-west1-docker.pkg.dev/PROJECT_ID/deepvogue/prefect-worker:latest
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+              env:
+                - name: PREFECT_API_URL
+                  value: PREFECT_SERVER_URL/api
+                - name: DV_ARTIFACT_BACKEND
+                  value: gcs
+              command: ["sh", "-c", "prefect worker start --pool default-process-pool --type process"]

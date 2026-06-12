@@ -1,4 +1,5 @@
 """Registry parse + hot-reload + append round-trip."""
+
 import time
 import pytest
 
@@ -13,10 +14,18 @@ def _seed_yaml(path, models):
 
 def test_parse_list_form(tmp_path):
     y = tmp_path / "models.yaml"
-    _seed_yaml(y, [
-        {"id": "a", "pkl": "/foo/a.pkl"},
-        {"id": "b", "pkl": "/foo/b.pkl", "dataset_kind": "frames", "default_trunc": 0.5},
-    ])
+    _seed_yaml(
+        y,
+        [
+            {"id": "a", "pkl": "/foo/a.pkl"},
+            {
+                "id": "b",
+                "pkl": "/foo/b.pkl",
+                "dataset_kind": "frames",
+                "default_trunc": 0.5,
+            },
+        ],
+    )
     r = Registry(yaml_path=y)
     items = r.list()
     assert {m.id for m in items} == {"a", "b"}
@@ -41,6 +50,7 @@ def test_hot_reload_on_mtime(tmp_path):
     _seed_yaml(y, [{"id": "a", "pkl": "/a.pkl"}, {"id": "b", "pkl": "/b.pkl"}])
     # force mtime change in case OS resolution is coarse
     import os
+
     new_mtime = y.stat().st_mtime + 2
     os.utime(y, (new_mtime, new_mtime))
     assert {m.id for m in r.list()} == {"a", "b"}
@@ -80,3 +90,22 @@ def test_malformed_raises(tmp_path):
     r = Registry(yaml_path=y)
     with pytest.raises(RuntimeError, match="expected list"):
         r.list()
+
+
+def test_registry_accepts_absolute_gs_uri(tmp_path, monkeypatch):
+    monkeypatch.setenv("DV_MODELS_ROOT", str(tmp_path))
+    y = tmp_path / "models.yaml"
+    _seed_yaml(y, [{"id": "a", "pkl": "gs://b/a.pkl"}])
+    entry = Registry(y).get("a")
+    # absolute URIs pass through resolve_uri() unchanged
+    assert entry["pkl"] == "gs://b/a.pkl"
+    assert entry["pkl_resolved"] == "gs://b/a.pkl"
+
+
+def test_registry_resolves_relative_against_models_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("DV_MODELS_ROOT", str(tmp_path))
+    y = tmp_path / "models.yaml"
+    _seed_yaml(y, [{"id": "tarot", "pkl": "tarot/snap.pkl"}])
+    entry = Registry(y).get("tarot")
+    # relative paths are prefixed with DV_MODELS_ROOT by resolve_uri()
+    assert entry["pkl_resolved"].endswith("/tarot/snap.pkl")

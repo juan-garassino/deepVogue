@@ -5,3 +5,5 @@ python-multipart
 imageio[ffmpeg]
 pyyaml>=6
 pydantic>=2.5
+fsspec>=2024.6.0   # loader.py reads pkls from any URI
+gcsfs>=2024.6.0    # gs:// pkl support (registry pkl_resolved)

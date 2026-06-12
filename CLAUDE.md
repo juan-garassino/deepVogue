@@ -2,7 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **GCP migration note (2026-06-07):** Cloud target: **`garassino-ml`** / `europe-west1`. Deploy infra lives in the sibling repo `006-deep-projects/deepVogue-mlops/` (Cloud Run YAMLs + GitHub build workflows, already retargeted). This repo holds research/training code; the MLOps sibling holds the deploy stack. See workspace root `CLAUDE.md` § "GCP architecture".
+> **GCP migration note (2026-06-07):** Cloud Run service YAMLs (`infra/cloudrun/*.yaml`) and build workflows (`.github/workflows/build-*.yml`) target `europe-west1-docker.pkg.dev`. The `PROJECT_ID` / `secrets.GCP_PROJECT` placeholder must resolve to **`garassino-ml`** at deploy time. See workspace root `CLAUDE.md` § "GCP architecture" for the canonical layout.
+>
+> - **Show-and-destroy:** `make show` brings the stack up (~1 min) — deploys mlflow, prefect (server + worker), inference, monitoring. `make destroy` tears down runtime (services + jobs + Cloud SQL → `activation-policy=NEVER`); buckets, AR images, IAM, and SAs are preserved. Cloud SQL is stopped, not deleted, so data survives a destroy/show cycle.
+> - **WIF:** `garassino-op` owns the canonical `github-pool` / `github-provider`. `infra/gcp/setup-iam.sh` only adds a *cross-project binding* on this project's `deepvogue-deployer-sa` so CI in this repo can impersonate it — no in-project pool created. `setup-iam.sh` errors with a clear message if `garassino-op` isn't bootstrapped yet (`GCP_OP_PROJECT` override available).
+> - **SA JSON keys:** none, except the `deepvogue-trainer-sa` key consumed by RunPod. External compute can't use WIF directly; this is the one documented deviation from the workspace-wide "no SA JSON keys anywhere" rule.
+> - **Budget:** `make deploy-budget` (or chained via `make gcp-setup`) upserts a €25/mo budget on the project via `infra/gcp/setup-budget.sh`, with 40/80/100% alert thresholds. Email recipient is wired once in the console (`DV_BUDGET_EMAIL` default `juan.garassino@hotmail.com`).
+> - **garassino-op bootstrap:** one-time `GCP_PROJECT=garassino-op GITHUB_REPO=<owner>/deepvogue make gcp-setup-op` provisions the WIF pool + TF state bucket (`gs://garassino-op-tf-state`) + log sink (`gs://garassino-op-logs`, severity≥WARNING from ml + ai) + Secret Manager placeholders (`op-{openai,anthropic,slack,runpod,trainer,neon-mlflow-dsn,neon-prefect-dsn}-*`). Prereq for `make gcp-setup` against ml.
+> - **MLflow + Prefect backends:** Neon free tier (no Cloud SQL). DSNs in `garassino-op` Secret Manager as `op-neon-mlflow-dsn` / `op-neon-prefect-dsn`; `infra/cloudrun/{mlflow,prefect-server}.service.yaml` pull them via cross-project `secretKeyRef` (`projects/<op-number>/secrets/...`). `make deploy-db-secrets` upserts them (or `make gcp-setup` chains it). Manual cleanup if a legacy Cloud SQL `deepvogue-pg` instance lingers: `gcloud sql instances delete deepvogue-pg --project=garassino-ml`.
 
 ## Project Overview
 
@@ -69,6 +76,86 @@ Endpoints: `GET /health`, `GET /models`, `GET /status?model=<id>`, `POST /genera
 The canonical entry point is `notebooks/deepVogue_colab.ipynb` (cells 00–07: setup → configure → prepare → train → project anchors → walk → factors → eval). Every step in the notebook is a `make` target — the notebook just sets `DV_*` env vars and calls `!make <target>`. The same commands run locally.
 
 **Bootstrap on Colab is GitHub-clone**: `git clone --depth 1 --branch master $GITHUB_URL /content/deepVogue` followed by `make colab-install` (which `pip install -e .`s the repo with train+serve+bot requirements and apt-installs ffmpeg). Drive holds *data and outputs only* (`/MyDrive/deepVogue/{data,datasets,runs,anchors,walks}/...`); the code is never zipped onto Drive.
+
+## MLOps stack
+
+> **Operator-facing reference:** [`docs/OPERATIONS.md`](docs/OPERATIONS.md) holds the canonical cold-start sequence, runbook, architecture decisions, and cost table. This section is the internal Claude-Code summary; the operations doc is the source of truth when they conflict.
+
+
+Local-nano stack (docker-compose) mirrors the prod-GCP stack one-for-one. Same code, same `models.yaml`, same flows — only the artifact backend (`DV_ARTIFACT_BACKEND=s3` → MinIO vs `gcs` → GCS) and endpoint URLs change.
+
+| Env var | Purpose |
+|---|---|
+| `DV_ARTIFACT_BACKEND` | `s3` (MinIO local), `gcs` (prod), `memory` (tests), `file` (default) |
+| `DV_S3_ENDPOINT_URL` | MinIO URL when backend=s3 |
+| `DV_MODELS_YAML` | Full URI to `models.yaml` (e.g. `gs://deepvogue-models/models.yaml`) |
+| `DV_MODELS_ROOT` | Resolution root for relative `pkl:` entries (back-compat) |
+| `DV_PUBLISH_TARGET` | Where `make publish` uploads (e.g. `gs://deepvogue-models`) |
+| `MLFLOW_TRACKING_URI` | MLflow server URL (Cloud Run in prod) |
+| `MLFLOW_TRACKING_TOKEN` | IAP id_token for programmatic access from Colab |
+| `PREFECT_API_URL` | Prefect server API URL |
+| `SLACK_WEBHOOK_URL` | Optional; if unset, Slack helpers no-op |
+
+GCS bucket layout (prod): `gs://deepvogue-{models,datasets,walks,mlflow,queue}`. Artifact Registry: `us-central1-docker.pkg.dev/<project>/deepvogue/{inference,mlflow,prefect-server,prefect-worker,train}`.
+
+New Makefile targets:
+- `make nano-up` / `nano-down` / `nano-logs` — local docker-compose stack
+- `make nano-smoke` — full pipeline against the local stack
+- `make publish MODEL_ID=...` — Drive → GCS + `models.yaml` append + Slack
+- `make publish-dataset DATASET=...` — Drive `dataset.zip` (+ `frames_index.json`) → `gs://deepvogue-datasets/<name>.zip`; the printed `dataset_uri` is the `DV_DATASET_URI` for RunPod/Vertex train jobs
+- `make gcp-setup` — runs `infra/gcp/setup.sh` + setup-sql.sh + setup-iam.sh
+- `make deploy-inference` / `deploy-mlflow` / `deploy-prefect` — Cloud Run deploy
+
+Prefect flows live in `deepVogue/orchestration/flows.py`. Each task dispatches via `get_backend(backend)`; v1 supports `backend="local"` (real `prepare`/`publish`, mock `train`/`project`/`walk`/`eval`), `backend="runpod"` (real `train` on a RunPod GPU pod; the rest delegate to `local`), and `backend="vertex"` (real `train` as a Vertex AI CustomJob in `$GCP_PROJECT` — same train image from Artifact Registry, ambient-ADC auth, VM auto-released on exit; the rest delegate to `local`). `colab` is scaffolded but raises `NotImplementedError` — manual Colab + `make publish` is the Colab path.
+
+Colab logs to remote MLflow via `deepVogue/tracking/mlflow_helpers.py::log_training_run`. IAP auth: notebook cell sets `MLFLOW_TRACKING_TOKEN` from `gcloud auth print-identity-token --audiences=<iap-oauth-client-id>`.
+
+### RunPod training backend
+
+`backend="runpod"` submits a GPU pod that pulls the dataset from GCS, runs `deepVogue/train.py`, rsync-mirrors snapshots to `DV_RUN_URI`, and publishes the final checkpoint to `DV_PUBLISH_TARGET/models.yaml` — all via the same `publish_checkpoint` path as Colab.
+
+**Auth setup (one-time):**
+- `RUNPOD_API_KEY` from runpod.io/console/user/settings
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON=$(cat trainer-key.json)` minted by `gcloud iam service-accounts keys create trainer-key.json --iam-account=deepvogue-trainer-sa@$GCP_PROJECT.iam.gserviceaccount.com` (the SA is created by `make gcp-setup`)
+- GHCR `deepvogue-train` package made public on first build (CI does this; private alternative is `runpod.create_container_registry_auth` → `create_template`)
+
+**Pod lifecycle:** the pod's entrypoint calls RunPod's GraphQL `podTerminate` on exit (success or failure). The orchestrator polls `get_pod` and treats `TERMINATED` / `EXITED` / pod-gone as success, `FAILED` / `DEAD` as failure, and force-terminates on `RUNPOD_MAX_TRAIN_HOURS` timeout. Final guard `terminate_pod` is idempotent.
+
+| Env var (launcher side) | Purpose |
+|---|---|
+| `RUNPOD_API_KEY` | Auth |
+| `RUNPOD_IMAGE` | GHCR image, e.g. `ghcr.io/<owner>/deepvogue-train:latest` |
+| `RUNPOD_GPU_TYPE` | GPU SKU (default `NVIDIA H100 80GB HBM3`) |
+| `RUNPOD_VOLUME_GB` | Persistent volume (default 0 — outputs mirror to GCS) |
+| `RUNPOD_CONTAINER_DISK_GB` | Ephemeral disk (default 100) |
+| `RUNPOD_MAX_TRAIN_HOURS` | Hard timeout; force-terminate past this (default 24) |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Full SA JSON; activated on pod startup |
+| `DV_DATASET_URI` | `gs://...` dataset.zip URI |
+| `DV_RUN_URI` | `gs://...` snapshot mirror prefix |
+| `DV_PUBLISH_TARGET` | `gs://...` root holding `models.yaml` |
+
+Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), `make runpod-train MODEL_ID=tarot` calls `scripts/submit_train.py --backend=runpod` (emits JSON events to stdout), `make runpod-status POD_ID=...` / `make runpod-logs POD_ID=...` / `make runpod-terminate POD_ID=...` for ops. CI: `.github/workflows/build-train.yml` auto-builds, pushes to GHCR, makes the package public, and runs a `DV_FAKE_TRAIN=1` smoke that exercises the entrypoint without a GPU.
+
+Per-tick MLflow logging from the pod is **deferred to v2** (IAP id-token broker needed from non-GCP infra); v1 captures the final FID in `models.yaml` via `publish`.
+
+**Reference / lineage:** the container shape (CUDA-devel base + scripted entrypoint + `make build`/`push`/`run`/`logs` targets) is modeled on `../../020-autoresearch/` (`Dockerfile` + `entrypoint.sh`). deepVogue differs in three ways: no Claude-in-the-loop (plain training job, not autonomous research), GCS-backed data + outputs instead of in-container state, and self-terminate via RunPod GraphQL so the orchestrator can `_wait` on pod disappearance.
+
+### Inference container
+
+The Cloud Run inference image (`infra/docker/inference/Dockerfile`) ships from a **CUDA devel base** (`pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel`) because the SG3 custom ops at `deepVogue/pytorch_utils/ops/{bias_act,upfirdn2d}.py` JIT-compile via `torch.utils.cpp_extension.load()` at *import time* — without `nvcc` the FastAPI warmup raises on the first model load. Trade-off: image is ~2-3GB larger than runtime-only; well within Cloud Run's 32GB limit.
+
+On startup `deepVogue/serve/api.py` calls `deepVogue.tracking.iap.start_iap_token_refresher()` — a silent no-op unless `IAP_OAUTH_CLIENT_ID` is set, in which case a daemon thread pulls an id-token from the GCE metadata server every 30 min and writes it to `MLFLOW_TRACKING_TOKEN`. MLflow's Python client reads that env var as a Bearer header, so an IAP-fronted MLflow on Cloud Run is reachable from the inference container without per-call auth wiring.
+
+### Monitoring + alerts
+
+`infra/gcp/setup-monitoring.sh` (idempotent) provisions uptime checks against `/health` for `deepvogue-{inference,mlflow,prefect-server}` and three alert policies — uptime failure, Cloud Run 5xx > 5%, Cloud SQL CPU > 80% — all attached to a Slack notification channel (webhook-token auth from `SLACK_WEBHOOK_URL`). Triggered by `make deploy-monitoring`, and tail-chained into `make gcp-setup`. Independent of in-app `deepVogue.notifications.slack.*` calls.
+
+**CI Telegram pings.** Every workflow in `.github/workflows/*.yml` now calls the local composite action `.github/actions/notify-telegram/action.yml` alongside its Slack step. The action is a no-op when `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` repo secrets are unset, so forks stay green. To wire it for this repo:
+1. Reuse `DV_TG_TOKEN` from BotFather (or create a fresh bot) — set it as the GitHub repo secret `TELEGRAM_BOT_TOKEN`.
+2. Send any message to the bot from your Telegram account, then `curl https://api.telegram.org/bot<token>/getUpdates | jq '.result[-1].message.chat.id'` to discover your chat id — set it as `TELEGRAM_CHAT_ID`.
+3. Push the branch; the next CI run pings you on success (deploys + train-image build) and on failure (everywhere).
+
+URI helpers consolidated: `deepVogue/clients.py::{strip_scheme, split_uri, scheme_of}` are the canonical home; `publish._strip_proto` and `local._split_uri` are gone.
 
 ## Common Commands
 
