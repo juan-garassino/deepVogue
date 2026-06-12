@@ -50,7 +50,7 @@ jobs:
         run: |
           sed "s|PROJECT_ID|${{ secrets.GCP_PROJECT }}|g; s|prefect-worker:latest|prefect-worker:${{ github.sha }}|g" infra/cloudrun/prefect-worker.job.yaml | \
             gcloud run jobs replace - --region=$REGION --project=${{ secrets.GCP_PROJECT }}
-      - if: success()
+      - if: success() && secrets.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":white_check_mark: prefect server + worker deployed @ ${{ github.sha }}"}' }
         env:
@@ -62,7 +62,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      - if: failure()
+      - if: failure() && secrets.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.27.0
         with: { payload: '{"text":":x: prefect build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' }
         env:

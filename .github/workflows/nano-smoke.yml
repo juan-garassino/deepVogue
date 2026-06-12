@@ -30,7 +30,7 @@ jobs:
         if: always()
         run: make nano-down
       - name: Slack on fail
-        if: failure()
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: '{"text":":x: nano-smoke failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

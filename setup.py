@@ -7,7 +7,7 @@ setup(
     name="deepVogue",
     version="1.0",
     description="StyleGAN3-t base for latent-cinema and data-driven generative art",
-    packages=find_packages(),
+    packages=find_packages(exclude=("tests", "tests.*")),
     install_requires=requirements,
     test_suite="tests",
     include_package_data=True,
