@@ -421,7 +421,7 @@ runpod-push: runpod-build ## Push the train image to GHCR
 
 runpod-train: ## Submit a RunPod training job (env: DV_DATASET_URI, DV_RUN_URI, GOOGLE_APPLICATION_CREDENTIALS_JSON)
 	@test -n "$(MODEL_ID)" || (echo "usage: make runpod-train MODEL_ID=<id> DV_DATASET_URI=gs://... DV_RUN_URI=gs://..." && exit 1)
-	DV_MODEL_ID=$(MODEL_ID) python scripts/submit_runpod_train.py --model-id=$(MODEL_ID)
+	DV_MODEL_ID=$(MODEL_ID) python scripts/submit_train.py --backend=runpod --model-id=$(MODEL_ID)
 
 runpod-status: ## Print status of a pod: make runpod-status POD_ID=<id>
 	@test -n "$(POD_ID)" || (echo "usage: make runpod-status POD_ID=<id>" && exit 1)
@@ -453,7 +453,7 @@ vertex-push: runpod-build ## Tag + push the train image into Artifact Registry (
 vertex-train: ## Submit a Vertex AI training job (env: GCP_PROJECT, DV_DATASET_URI, DV_RUN_URI; no SA key needed)
 	@test -n "$(MODEL_ID)" || (echo "usage: make vertex-train MODEL_ID=<id> GCP_PROJECT=garassino-ml DV_DATASET_URI=gs://... DV_RUN_URI=gs://..." && exit 1)
 	DV_MODEL_ID=$(MODEL_ID) VERTEX_IMAGE=$(VERTEX_IMAGE):$(VERTEX_TAG) \
-	    python scripts/submit_vertex_train.py --model-id=$(MODEL_ID)
+	    python scripts/submit_train.py --backend=vertex --model-id=$(MODEL_ID)
 
 vertex-status: ## Describe a job: make vertex-status JOB=<custom-job resource name or numeric id>
 	@test -n "$(JOB)" || (echo "usage: make vertex-status JOB=<id>" && exit 1)

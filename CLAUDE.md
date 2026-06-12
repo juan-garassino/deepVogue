@@ -134,7 +134,7 @@ Colab logs to remote MLflow via `deepVogue/tracking/mlflow_helpers.py::log_train
 | `DV_RUN_URI` | `gs://...` snapshot mirror prefix |
 | `DV_PUBLISH_TARGET` | `gs://...` root holding `models.yaml` |
 
-Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), `make runpod-train MODEL_ID=tarot` calls `scripts/submit_runpod_train.py` (emits JSON events to stdout), `make runpod-status POD_ID=...` / `make runpod-logs POD_ID=...` / `make runpod-terminate POD_ID=...` for ops. CI: `.github/workflows/build-train.yml` auto-builds, pushes to GHCR, makes the package public, and runs a `DV_FAKE_TRAIN=1` smoke that exercises the entrypoint without a GPU.
+Targets: `make runpod-build` / `runpod-push` build+push the train image (GHCR), `make runpod-train MODEL_ID=tarot` calls `scripts/submit_train.py --backend=runpod` (emits JSON events to stdout), `make runpod-status POD_ID=...` / `make runpod-logs POD_ID=...` / `make runpod-terminate POD_ID=...` for ops. CI: `.github/workflows/build-train.yml` auto-builds, pushes to GHCR, makes the package public, and runs a `DV_FAKE_TRAIN=1` smoke that exercises the entrypoint without a GPU.
 
 Per-tick MLflow logging from the pod is **deferred to v2** (IAP id-token broker needed from non-GCP infra); v1 captures the final FID in `models.yaml` via `publish`.
 

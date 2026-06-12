@@ -246,8 +246,7 @@ deepVogue-mlops/
 │       ├── setup-monitoring.sh       # ml: uptime + alert policies + Slack channel
 │       └── setup-budget.sh           # ml: €25 budget + 40/80/100% thresholds
 ├── scripts/
-│   ├── submit_runpod_train.py        # CLI wrapper around backends.runpod.train
-│   ├── submit_vertex_train.py        # CLI wrapper around backends.vertex.train
+│   ├── submit_train.py               # CLI wrapper around backends.{runpod,vertex}.train
 │   └── run_nano_smoke.py             # docker-compose end-to-end smoke
 ├── .github/
 │   ├── actions/notify-telegram/      # composite — silent without TELEGRAM_* secrets

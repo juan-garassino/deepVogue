@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-"""Submit a Vertex AI custom training job for deepVogue.
+"""Submit a GPU training job for deepVogue (RunPod or Vertex AI).
 
-Reads gs:// URIs and GCP config from the environment (see infra/.env.example);
-prints a JSON line per lifecycle event to stdout so callers can pipe / parse.
-The GPU VM is provisioned by Vertex and released automatically when the
-container exits — zero idle cost, no SA JSON key (ambient ADC).
+Reads gs:// URIs and backend config from the environment (see
+infra/.env.example); prints a JSON line per lifecycle event to stdout so
+callers can pipe / parse.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from deepVogue.orchestration.backends.vertex import train as vertex_train  # noqa: E402
+from deepVogue.orchestration.backends import get_backend  # noqa: E402
 
 
 def _emit(event: str, **fields):
@@ -26,7 +25,8 @@ def _emit(event: str, **fields):
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="submit_vertex_train")
+    p = argparse.ArgumentParser(prog="submit_train")
+    p.add_argument("--backend", required=True, choices=["runpod", "vertex"])
     p.add_argument("--model-id", required=True)
     p.add_argument("--cfg", default=os.environ.get("DV_CFG", "stylegan3-t"))
     p.add_argument("--kimg", type=int, default=int(os.environ.get("DV_KIMG", "5000")))
@@ -43,13 +43,14 @@ def main(argv: list[str] | None = None) -> int:
 
     _emit(
         "submitting",
+        backend=args.backend,
         model_id=args.model_id,
         cfg=args.cfg,
         kimg=args.kimg,
         res=args.res,
     )
     try:
-        out = vertex_train(
+        out = get_backend(args.backend).train(
             dataset_name=args.model_id,
             cfg=args.cfg,
             kimg=args.kimg,
