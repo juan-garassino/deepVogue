@@ -20,6 +20,12 @@ import time
 from typing import Any
 
 from deepVogue.notifications import slack
+from deepVogue.orchestration.backends._common import (
+    build_train_env,
+    delegate_to_local,
+    require_env,
+    snapshot_uri,
+)
 
 log = logging.getLogger(__name__)
 
@@ -28,61 +34,12 @@ SUCCESS_STATUSES = {"TERMINATED", "EXITED"}
 FAILURE_STATUSES = {"FAILED", "DEAD"}
 
 
-def _require_env(name: str) -> str:
-    val = os.environ.get(name)
-    if not val:
-        raise RuntimeError(f"{name} must be set for runpod backend")
-    return val
-
-
-def _build_env(
-    *,
-    dataset_uri: str,
-    run_uri: str,
-    model_id: str,
-    cfg: str,
-    kimg: int,
-    gamma: float,
-    batch: int,
-    res: int,
-    resume_from: str | None,
-) -> dict[str, str]:
-    env = {
-        "DV_DATASET_URI": dataset_uri,
-        "DV_RUN_URI": run_uri,
-        "DV_MODEL_ID": model_id,
-        "DV_CFG": cfg,
-        "DV_KIMG": str(kimg),
-        "DV_GAMMA": str(gamma),
-        "DV_BATCH": str(batch),
-        "DV_RES": str(res),
-        "RUNPOD_API_KEY": _require_env("RUNPOD_API_KEY"),
-        "GOOGLE_APPLICATION_CREDENTIALS_JSON": _require_env(
-            "GOOGLE_APPLICATION_CREDENTIALS_JSON"
-        ),
-    }
-    if resume_from:
-        env["DV_RESUME_FROM"] = resume_from
-    for k in (
-        "MLFLOW_TRACKING_URI",
-        "DV_PUBLISH_TARGET",
-        "DV_ARTIFACT_BACKEND",
-        "DV_MODELS_ROOT",
-        "DV_MODELS_YAML",
-        "SLACK_WEBHOOK_URL",
-    ):
-        v = os.environ.get(k)
-        if v:
-            env[k] = v
-    return env
-
-
 def _submit(env: dict[str, str], name: str) -> str:
     """Create a RunPod GPU pod, return its id."""
     import runpod
 
-    runpod.api_key = _require_env("RUNPOD_API_KEY")
-    image = _require_env("RUNPOD_IMAGE")
+    runpod.api_key = require_env("RUNPOD_API_KEY", "runpod")
+    image = require_env("RUNPOD_IMAGE", "runpod")
     gpu_type = os.environ.get("RUNPOD_GPU_TYPE", "NVIDIA H100 80GB HBM3")
     volume_gb = int(os.environ.get("RUNPOD_VOLUME_GB", "0"))
     container_disk_gb = int(os.environ.get("RUNPOD_CONTAINER_DISK_GB", "100"))
@@ -161,12 +118,12 @@ def train(
       RUNPOD_GPU_TYPE, RUNPOD_VOLUME_GB, RUNPOD_CONTAINER_DISK_GB,
       RUNPOD_MAX_TRAIN_HOURS (default 24), DV_MODEL_ID, DV_RESUME_FROM
     """
-    dataset_uri = os.environ.get("DV_DATASET_URI") or _require_env("DV_DATASET_URI")
-    run_uri = target_uri or os.environ.get("DV_RUN_URI") or _require_env("DV_RUN_URI")
+    dataset_uri = require_env("DV_DATASET_URI", "runpod")
+    run_uri = target_uri or require_env("DV_RUN_URI", "runpod")
     model_id = os.environ.get("DV_MODEL_ID", dataset_name)
     max_hours = float(os.environ.get("RUNPOD_MAX_TRAIN_HOURS", "24"))
 
-    env = _build_env(
+    env = build_train_env(
         dataset_uri=dataset_uri,
         run_uri=run_uri,
         model_id=model_id,
@@ -176,6 +133,13 @@ def train(
         batch=batch,
         res=res,
         resume_from=resume_from,
+        extra={
+            # the pod self-terminates via GraphQL and gsutil needs the SA key
+            "RUNPOD_API_KEY": require_env("RUNPOD_API_KEY", "runpod"),
+            "GOOGLE_APPLICATION_CREDENTIALS_JSON": require_env(
+                "GOOGLE_APPLICATION_CREDENTIALS_JSON", "runpod"
+            ),
+        },
     )
 
     pod_name = f"dv-{model_id}-{int(time.time())}"
@@ -198,7 +162,7 @@ def train(
     # Guard terminate (idempotent; cheap if pod is gone).
     _terminate_quiet(pod_id)
 
-    pkl_uri = f"{run_uri.rstrip('/')}/network-snapshot-{kimg:06d}.pkl"
+    pkl_uri = snapshot_uri(run_uri, kimg)
 
     if status in SUCCESS_STATUSES or status == "GONE":
         slack.notify_success(
@@ -226,10 +190,7 @@ def train(
 
 
 def _delegate(op_name: str, **kw):
-    from . import local
-
-    log.info("runpod.%s: delegating to local backend", op_name)
-    return getattr(local, op_name)(**kw)
+    return delegate_to_local("runpod", op_name, **kw)
 
 
 def prepare(**kw):

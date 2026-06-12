@@ -21,6 +21,12 @@ import time
 from typing import Any
 
 from deepVogue.notifications import slack
+from deepVogue.orchestration.backends._common import (
+    build_train_env,
+    delegate_to_local,
+    require_env,
+    snapshot_uri,
+)
 
 log = logging.getLogger(__name__)
 
@@ -29,61 +35,13 @@ DEFAULT_ACCELERATOR = "NVIDIA_L4"
 DEFAULT_BOOT_DISK_GB = 200
 
 
-def _require_env(name: str) -> str:
-    val = os.environ.get(name)
-    if not val:
-        raise RuntimeError(f"{name} must be set for vertex backend")
-    return val
-
-
-def _build_env(
-    *,
-    dataset_uri: str,
-    run_uri: str,
-    model_id: str,
-    cfg: str,
-    kimg: int,
-    gamma: float,
-    batch: int,
-    res: int,
-    resume_from: str | None,
-) -> dict[str, str]:
-    # No RUNPOD_API_KEY / GOOGLE_APPLICATION_CREDENTIALS_JSON: Vertex attaches
-    # the service account and the platform owns teardown.
-    env = {
-        "DV_DATASET_URI": dataset_uri,
-        "DV_RUN_URI": run_uri,
-        "DV_MODEL_ID": model_id,
-        "DV_CFG": cfg,
-        "DV_KIMG": str(kimg),
-        "DV_GAMMA": str(gamma),
-        "DV_BATCH": str(batch),
-        "DV_RES": str(res),
-    }
-    if resume_from:
-        env["DV_RESUME_FROM"] = resume_from
-    for k in (
-        "MLFLOW_TRACKING_URI",
-        "DV_PUBLISH_TARGET",
-        "DV_ARTIFACT_BACKEND",
-        "DV_MODELS_ROOT",
-        "DV_MODELS_YAML",
-        "SLACK_WEBHOOK_URL",
-        "DV_FAKE_TRAIN",
-    ):
-        v = os.environ.get(k)
-        if v:
-            env[k] = v
-    return env
-
-
 def _submit(env: dict[str, str], name: str, max_hours: float):
     """Create and submit a Vertex AI CustomJob, return the job object."""
     from google.cloud import aiplatform
 
-    project = _require_env("GCP_PROJECT")
+    project = require_env("GCP_PROJECT", "vertex")
     region = os.environ.get("GCP_REGION", "europe-west1")
-    image = os.environ.get("VERTEX_IMAGE") or _require_env("RUNPOD_IMAGE")
+    image = os.environ.get("VERTEX_IMAGE") or require_env("RUNPOD_IMAGE", "vertex")
     machine_type = os.environ.get("VERTEX_MACHINE_TYPE", DEFAULT_MACHINE_TYPE)
     accelerator = os.environ.get("VERTEX_ACCELERATOR", DEFAULT_ACCELERATOR)
     accelerator_count = int(os.environ.get("VERTEX_ACCELERATOR_COUNT", "1"))
@@ -153,12 +111,12 @@ def train(
       VERTEX_SERVICE_ACCOUNT (default deepvogue-trainer-sa@$GCP_PROJECT...),
       VERTEX_MAX_TRAIN_HOURS (default 24), DV_MODEL_ID, DV_RESUME_FROM
     """
-    dataset_uri = _require_env("DV_DATASET_URI")
-    run_uri = target_uri or _require_env("DV_RUN_URI")
+    dataset_uri = require_env("DV_DATASET_URI", "vertex")
+    run_uri = target_uri or require_env("DV_RUN_URI", "vertex")
     model_id = os.environ.get("DV_MODEL_ID", dataset_name)
     max_hours = float(os.environ.get("VERTEX_MAX_TRAIN_HOURS", "24"))
 
-    env = _build_env(
+    env = build_train_env(
         dataset_uri=dataset_uri,
         run_uri=run_uri,
         model_id=model_id,
@@ -200,7 +158,7 @@ def train(
     elapsed = int(time.time() - start)
     state = _job_state_name(job)
 
-    pkl_uri = f"{run_uri.rstrip('/')}/network-snapshot-{kimg:06d}.pkl"
+    pkl_uri = snapshot_uri(run_uri, kimg)
 
     if failure is None and state.endswith("SUCCEEDED"):
         slack.notify_success(
@@ -230,10 +188,7 @@ def train(
 
 
 def _delegate(op_name: str, **kw):
-    from . import local
-
-    log.info("vertex.%s: delegating to local backend", op_name)
-    return getattr(local, op_name)(**kw)
+    return delegate_to_local("vertex", op_name, **kw)
 
 
 def prepare(**kw):
