@@ -17,6 +17,14 @@ import click
 from deepVogue import _paths
 
 
+def _resolve_pkl(override: Optional[str]) -> str:
+    p = _paths.resolve()
+    pkl = override or (str(p.network_pkl) if p.network_pkl else None)
+    if pkl is None:
+        raise click.ClickException("set --network or $DV_NETWORK_PKL")
+    return pkl
+
+
 @click.group()
 def cli() -> None:
     """SeFa-style factor edits."""
@@ -29,11 +37,8 @@ def cli() -> None:
               help="defaults to $DV_RUN_DIR/factors.pt")
 def discover_cmd(network_pkl: Optional[str], out: Optional[Path]) -> None:
     """Run closed-form factorization → factors.pt."""
-    p = _paths.resolve()
-    pkl = network_pkl or (str(p.network_pkl) if p.network_pkl else None)
-    if pkl is None:
-        raise click.ClickException("set --network or $DV_NETWORK_PKL")
-    out = out or (p.run_dir / "factors.pt")
+    pkl = _resolve_pkl(network_pkl)
+    out = out or (_paths.resolve().run_dir / "factors.pt")
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, "-m", "deepVogue.closed_form_factorization",
            "--ckpt", pkl, "--out", str(out)]
@@ -52,10 +57,7 @@ def discover_cmd(network_pkl: Optional[str], out: Optional[Path]) -> None:
 def apply_cmd(network_pkl: Optional[str], factors: str, index: int, degree: float,
               seed: int, out: Path) -> None:
     """Render a single factor edit (delegates to apply_factor.py)."""
-    p = _paths.resolve()
-    pkl = network_pkl or (str(p.network_pkl) if p.network_pkl else None)
-    if pkl is None:
-        raise click.ClickException("set --network or $DV_NETWORK_PKL")
+    pkl = _resolve_pkl(network_pkl)
     cmd = [sys.executable, "-m", "deepVogue.apply_factor",
            "--ckpt", pkl, "--factor", factors,
            "--index", str(index), "--degree", str(degree),

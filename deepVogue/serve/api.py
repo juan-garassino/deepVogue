@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -13,15 +14,10 @@ from .registry import Registry
 from .schemas import GenerateRequest, WalkRequest
 
 
-app = FastAPI(title="deepVogue inference", version="0.1.0")
-_registry = Registry()
-
-
-@app.on_event("startup")
-def warm_models() -> None:
+def _warm_models(registry: Registry) -> None:
     """Pre-load the first two registered models so first request isn't cold."""
     try:
-        entries = _registry.list()[:2]
+        entries = registry.list()[:2]
     except Exception as e:
         print(f"[serve] registry not loadable yet ({e}); skipping warm-up")
         return
@@ -31,6 +27,18 @@ def warm_models() -> None:
             print(f"[serve] warm: {entry.id} ← {entry.pkl}")
         except Exception as e:
             print(f"[serve] warm failed for {entry.id}: {e}")
+
+
+# lifespan instead of import-time warm-up: loading pkls needs a GPU + registry,
+# which importers of this module (tests, bot) must not pay for.
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    _warm_models(_registry)
+    yield
+
+
+app = FastAPI(title="deepVogue inference", version="0.1.0", lifespan=_lifespan)
+_registry = Registry()
 
 
 @app.get("/health")
