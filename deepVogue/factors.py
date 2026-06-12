@@ -31,17 +31,33 @@ def cli() -> None:
 
 
 @cli.command("discover")
-@click.option("--network", "network_pkl", type=click.Path(exists=True), default=None,
-              help="defaults to $DV_NETWORK_PKL")
-@click.option("--out", type=click.Path(path_type=Path), default=None,
-              help="defaults to $DV_RUN_DIR/factors.pt")
+@click.option(
+    "--network",
+    "network_pkl",
+    type=click.Path(exists=True),
+    default=None,
+    help="defaults to $DV_NETWORK_PKL",
+)
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="defaults to $DV_RUN_DIR/factors.pt",
+)
 def discover_cmd(network_pkl: Optional[str], out: Optional[Path]) -> None:
     """Run closed-form factorization → factors.pt."""
     pkl = _resolve_pkl(network_pkl)
     out = out or (_paths.resolve().run_dir / "factors.pt")
     out.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, "-m", "deepVogue.closed_form_factorization",
-           "--ckpt", pkl, "--out", str(out)]
+    cmd = [
+        sys.executable,
+        "-m",
+        "deepVogue.closed_form_factorization",
+        "--ckpt",
+        pkl,
+        "--out",
+        str(out),
+    ]
     click.echo(f"$ {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
     click.echo(f"✓ {out}")
@@ -54,14 +70,33 @@ def discover_cmd(network_pkl: Optional[str], out: Optional[Path]) -> None:
 @click.option("--degree", "-d", type=float, default=5.0, show_default=True)
 @click.option("--seed", type=int, default=0)
 @click.option("--out", type=click.Path(path_type=Path), default=Path("factor_edit.png"))
-def apply_cmd(network_pkl: Optional[str], factors: str, index: int, degree: float,
-              seed: int, out: Path) -> None:
+def apply_cmd(
+    network_pkl: Optional[str],
+    factors: str,
+    index: int,
+    degree: float,
+    seed: int,
+    out: Path,
+) -> None:
     """Render a single factor edit (delegates to apply_factor.py)."""
     pkl = _resolve_pkl(network_pkl)
-    cmd = [sys.executable, "-m", "deepVogue.apply_factor",
-           "--ckpt", pkl, "--factor", factors,
-           "--index", str(index), "--degree", str(degree),
-           "--seed", str(seed), "--out", str(out)]
+    cmd = [
+        sys.executable,
+        "-m",
+        "deepVogue.apply_factor",
+        "--ckpt",
+        pkl,
+        "--factor",
+        factors,
+        "--index",
+        str(index),
+        "--degree",
+        str(degree),
+        "--seed",
+        str(seed),
+        "--out",
+        str(out),
+    ]
     click.echo(f"$ {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 

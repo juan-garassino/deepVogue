@@ -143,7 +143,7 @@ def walk(
         try:
             with torch.no_grad():
                 for t in range(traj.shape[0]):
-                    w = torch.from_numpy(traj[t:t + 1]).to(device).float()
+                    w = torch.from_numpy(traj[t : t + 1]).to(device).float()
                     img = G.synthesis(w, noise_mode="const")
                     writer.append_data(to_uint8_hwc(img))
         finally:

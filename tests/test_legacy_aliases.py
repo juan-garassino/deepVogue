@@ -29,9 +29,7 @@ def test_dnnlib_alias_resolves():
 
 def test_unpickler_resolves_nvidia_global_names():
     # hand-rolled GLOBAL-opcode pickles using the module paths NVIDIA pkls embed
-    cls = legacy._LegacyUnpickler(
-        io.BytesIO(b"cdnnlib.util\nEasyDict\n.")
-    ).load()
+    cls = legacy._LegacyUnpickler(io.BytesIO(b"cdnnlib.util\nEasyDict\n.")).load()
     assert cls is neuronal_network_utils.EasyDict
 
     from deepVogue.pytorch_utils import persistence

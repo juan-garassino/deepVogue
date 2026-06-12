@@ -11,11 +11,15 @@ SCRIPT = REPO / "scripts" / "submit_train.py"
 
 def _run(args, env_extra=None):
     import os
+
     env = {k: v for k, v in os.environ.items() if not k.startswith("DV_")}
     env.update(env_extra or {})
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, env=env, cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(REPO),
     )
 
 
@@ -23,7 +27,8 @@ def test_missing_run_uri_emits_error_json():
     res = _run(["--backend=runpod", "--model-id=t"])
     assert res.returncode == 2
     assert json.loads(res.stdout.splitlines()[-1]) == {
-        "event": "error", "message": "DV_RUN_URI is required",
+        "event": "error",
+        "message": "DV_RUN_URI is required",
     }
 
 

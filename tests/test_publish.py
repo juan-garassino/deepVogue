@@ -133,7 +133,9 @@ def test_publish_dataset_uploads_zip_and_index(drive_dataset, memory_fs, monkeyp
     info = publish_dataset(name="film", src_dir=drive_dataset)
 
     assert info["dataset_uri"] == "memory://deepvogue-datasets/film.zip"
-    assert info["frames_index_uri"] == "memory://deepvogue-datasets/film.frames_index.json"
+    assert (
+        info["frames_index_uri"] == "memory://deepvogue-datasets/film.frames_index.json"
+    )
     assert memory_fs.exists("deepvogue-datasets/film.zip")
     assert memory_fs.exists("deepvogue-datasets/film.frames_index.json")
     with memory_fs.open("deepvogue-datasets/film.zip", "rb") as f:

@@ -18,7 +18,8 @@ from deepVogue.dataset_tool.convert import convert_dataset
 def test_module_is_runnable():
     res = subprocess.run(
         [sys.executable, "-m", "deepVogue.dataset_tool", "--help"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert res.returncode == 0
     assert "--source" in res.stdout
@@ -32,10 +33,21 @@ def test_convert_emits_stylegan_zip(tmp_path):
         PIL.Image.fromarray(arr).save(src / f"{i}.png")
     dest = tmp_path / "dataset.zip"
 
-    res = CliRunner().invoke(convert_dataset, [
-        "--source", str(src), "--dest", str(dest),
-        "--width", "64", "--height", "64", "--transform", "center-crop",
-    ])
+    res = CliRunner().invoke(
+        convert_dataset,
+        [
+            "--source",
+            str(src),
+            "--dest",
+            str(dest),
+            "--width",
+            "64",
+            "--height",
+            "64",
+            "--transform",
+            "center-crop",
+        ],
+    )
     assert res.exit_code == 0, res.output
 
     names = zipfile.ZipFile(dest).namelist()

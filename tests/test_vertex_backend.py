@@ -109,7 +109,9 @@ def test_train_submits_job_with_expected_spec(fake_aiplatform, env):
 
     assert out["job"].endswith("customJobs/123")
     assert out["kimg"] == 200
-    assert out["pkl"] == "gs://deepvogue-runs/tarot/2026-06-12/network-snapshot-000200.pkl"
+    assert (
+        out["pkl"] == "gs://deepvogue-runs/tarot/2026-06-12/network-snapshot-000200.pkl"
+    )
     assert "elapsed_s" in out
 
 

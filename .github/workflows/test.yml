@@ -17,7 +17,10 @@ jobs:
       - name: Install
         run: |
           pip install -e .
-          pip install -r requirements-orchestration.txt
+          pip install -r requirements-serve.txt -r requirements-orchestration.txt
+          # CPU torch: the merged suite exercises legacy.py aliases, the stub
+          # fixture builder, and the local backend — none need a GPU
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install pytest black
       - name: Build stub state dict
         run: python scripts/build_stub_state_dict.py

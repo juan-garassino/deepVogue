@@ -76,7 +76,11 @@ def _submit(env: dict[str, str], name: str, max_hours: float):
     job.submit(service_account=service_account, timeout=int(max_hours * 3600))
     log.info(
         "vertex: submitted %s (image=%s machine=%s accel=%sx%d)",
-        job.resource_name, image, machine_type, accelerator, accelerator_count,
+        job.resource_name,
+        image,
+        machine_type,
+        accelerator,
+        accelerator_count,
     )
     return job
 
@@ -120,7 +124,9 @@ def train(
     if os.environ.get("DV_FAKE_TRAIN"):
         # opt-in passthrough for CI smokes; loud because a leaked =1 on a real
         # run produces a stub pkl and phantom success
-        log.warning("forwarding DV_FAKE_TRAIN=%s into the job", os.environ["DV_FAKE_TRAIN"])
+        log.warning(
+            "forwarding DV_FAKE_TRAIN=%s into the job", os.environ["DV_FAKE_TRAIN"]
+        )
         extra["DV_FAKE_TRAIN"] = os.environ["DV_FAKE_TRAIN"]
 
     env = build_train_env(

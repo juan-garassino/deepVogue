@@ -233,11 +233,17 @@ def _main() -> None:
     d = sub.add_parser("dataset", help="upload dataset.zip → GCS for RunPod/Vertex")
     d.add_argument("--name", required=True)
     d.add_argument("--src-dir", required=True, type=Path)
-    d.add_argument("--dest", default=None, help="default $DV_DATASET_GCS_ROOT or gs://deepvogue-datasets")
+    d.add_argument(
+        "--dest",
+        default=None,
+        help="default $DV_DATASET_GCS_ROOT or gs://deepvogue-datasets",
+    )
 
     args = p.parse_args()
     if args.cmd == "dataset":
-        info = publish_dataset(name=args.name, src_dir=args.src_dir, target_root=args.dest)
+        info = publish_dataset(
+            name=args.name, src_dir=args.src_dir, target_root=args.dest
+        )
     else:
         if not args.model_id or not args.src_dir:
             p.error("--model-id and --src-dir are required")
