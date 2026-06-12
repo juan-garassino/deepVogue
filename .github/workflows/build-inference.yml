@@ -69,7 +69,8 @@ jobs:
           exit 1
 
       - name: Slack success
-        if: success() && secrets.SLACK_WEBHOOK_URL != ''
+        if: success()
+        continue-on-error: true   # absent SLACK_WEBHOOK_URL must not fail the job
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: '{"text":":white_check_mark: inference deployed — ${{ steps.smoke.outputs.url }}"}'
@@ -86,7 +87,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       - name: Slack fail
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure()
+        continue-on-error: true   # absent SLACK_WEBHOOK_URL must not fail the job
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: '{"text":":x: inference build/deploy failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

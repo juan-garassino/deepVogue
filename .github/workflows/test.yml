@@ -29,7 +29,8 @@ jobs:
       - name: Test
         run: pytest -v -m "not gpu"
       - name: Notify Slack on failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure()
+        continue-on-error: true   # absent SLACK_WEBHOOK_URL must not fail the job
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: '{"text":":x: tests failed on ${{ github.ref }} ${{ github.sha }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
