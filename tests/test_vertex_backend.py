@@ -185,3 +185,30 @@ def test_non_gpu_ops_delegate_to_local(monkeypatch):
     backend.prepare(x=1)
     backend.publish(y=2)
     assert called == {"prepare": {"x": 1}, "publish": {"y": 2}}
+
+
+def test_fake_train_not_forwarded_by_default(fake_aiplatform, env, monkeypatch):
+    monkeypatch.delenv("DV_FAKE_TRAIN", raising=False)
+    from deepVogue.orchestration.backends import vertex as backend
+
+    backend.train(
+        dataset_name="tarot", cfg="stylegan3-t", kimg=10, gamma=2.0, batch=32, res=64
+    )
+    env_passed = {
+        e["name"] for e in _worker_pool(fake_aiplatform)["container_spec"]["env"]
+    }
+    assert "DV_FAKE_TRAIN" not in env_passed
+
+
+def test_fake_train_opt_in_forwarded(fake_aiplatform, env, monkeypatch):
+    monkeypatch.setenv("DV_FAKE_TRAIN", "1")
+    from deepVogue.orchestration.backends import vertex as backend
+
+    backend.train(
+        dataset_name="tarot", cfg="stylegan3-t", kimg=10, gamma=2.0, batch=32, res=64
+    )
+    env_passed = {
+        e["name"]: e["value"]
+        for e in _worker_pool(fake_aiplatform)["container_spec"]["env"]
+    }
+    assert env_passed["DV_FAKE_TRAIN"] == "1"

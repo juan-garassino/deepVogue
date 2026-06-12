@@ -116,6 +116,13 @@ def train(
     model_id = os.environ.get("DV_MODEL_ID", dataset_name)
     max_hours = float(os.environ.get("VERTEX_MAX_TRAIN_HOURS", "24"))
 
+    extra: dict[str, str] = {}
+    if os.environ.get("DV_FAKE_TRAIN"):
+        # opt-in passthrough for CI smokes; loud because a leaked =1 on a real
+        # run produces a stub pkl and phantom success
+        log.warning("forwarding DV_FAKE_TRAIN=%s into the job", os.environ["DV_FAKE_TRAIN"])
+        extra["DV_FAKE_TRAIN"] = os.environ["DV_FAKE_TRAIN"]
+
     env = build_train_env(
         dataset_uri=dataset_uri,
         run_uri=run_uri,
@@ -126,6 +133,7 @@ def train(
         batch=batch,
         res=res,
         resume_from=resume_from,
+        extra=extra,
     )
 
     job_name = f"dv-{model_id}-{int(time.time())}"

@@ -14,15 +14,19 @@ class BackendOp(Protocol):
 
 
 def get_backend(name: str) -> BackendOp:
-    from . import local, colab, runpod, vertex
-
+    # Lazy per-name imports: local.py pulls torch/PIL at module level, which a
+    # thin launcher env (make runpod-train / vertex-train) must not need.
     name = name.lower()
     if name == "local":
+        from . import local
         return local
     if name == "colab":
+        from . import colab
         return colab
     if name == "runpod":
+        from . import runpod
         return runpod
     if name == "vertex":
+        from . import vertex
         return vertex
     raise ValueError(f"unknown backend: {name!r}")

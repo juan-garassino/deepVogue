@@ -12,6 +12,9 @@ import os
 log = logging.getLogger(__name__)
 
 # Optional launcher env forwarded into every train container when set.
+# DV_FAKE_TRAIN is deliberately NOT here: a leaked =1 would boot a paid pod
+# that emits a stub pkl, skips gsutil, and reports phantom success. Backends
+# that want it (vertex, for CI smokes) opt in via extra=.
 _PASSTHROUGH_KEYS = (
     "MLFLOW_TRACKING_URI",
     "DV_PUBLISH_TARGET",
@@ -19,7 +22,6 @@ _PASSTHROUGH_KEYS = (
     "DV_MODELS_ROOT",
     "DV_MODELS_YAML",
     "SLACK_WEBHOOK_URL",
-    "DV_FAKE_TRAIN",
 )
 
 

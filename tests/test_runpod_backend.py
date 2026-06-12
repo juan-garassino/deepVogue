@@ -211,3 +211,15 @@ def test_non_train_ops_delegate_to_local(fake_runpod, env, monkeypatch, tmp_path
         target_uri="memory://deepvogue-datasets-runpod",
     )
     assert out["dataset_uri"].endswith(".zip")
+
+
+def test_fake_train_never_forwarded_to_runpod(fake_runpod, env, monkeypatch):
+    """A leaked DV_FAKE_TRAIN=1 must not reach a paid pod (stub pkl + phantom success)."""
+    _fast_poll(monkeypatch)
+    monkeypatch.setenv("DV_FAKE_TRAIN", "1")
+    from deepVogue.orchestration.backends import runpod as backend
+
+    backend.train(
+        dataset_name="tarot", cfg="stylegan3-t", kimg=10, gamma=2.0, batch=32, res=64
+    )
+    assert "DV_FAKE_TRAIN" not in fake_runpod.create_pod.call_args.kwargs["env"]
