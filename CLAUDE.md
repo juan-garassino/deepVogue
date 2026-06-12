@@ -138,7 +138,7 @@ python deepVogue/blend_models.py --low-res-pkl=A.pkl --hi-res-pkl=B.pkl --resolu
 python deepVogue/style_mixing.py --network=<pkl> --rows=... --cols=...
 
 # build training dataset (zips of square images)
-python deepVogue/dataset_tool.py --source=<images-dir> --dest=<dataset.zip>
+python -m deepVogue.dataset_tool --source=<images-dir> --dest=<dataset.zip>
 
 # evaluate a checkpoint
 python deepVogue/calc_metrics.py --network=<pkl> --metrics=fid50k_full --data=<dataset.zip>
@@ -184,7 +184,7 @@ The package is the StyleGAN2-ADA-PyTorch codebase split into purpose-named subpa
 
 All internal imports are package-qualified (`from deepVogue import legacy`, `from deepVogue.pytorch_utils import misc`). The original NVIDIA bare-name style (`import legacy`) was rewritten in bulk so the package works as an editable install on Colab. Mirror the package-qualified style in any new code.
 
-The `dataset_tool.py` file at top level (NVIDIA's official `convert_dataset` CLI) and the `dataset_tool/` package both exist. The package contains `prepare.py` (the `deepvogue-prepare` CLI — inline ffmpeg frame extraction + avg-hash dedup, no external deps) and `tools.py`; the top-level file is the zip-emitter. Don't reimplement either. The dataPalette repo at `/Users/juan-garassino/Code/005-products/004-creative-tools/004-dataPalette` is *reference only* — not a runtime dependency.
+Everything dataset lives in the `dataset_tool/` package: `prepare.py` (the `deepvogue-prepare` CLI — inline ffmpeg frame extraction + avg-hash dedup, no external deps), `convert.py` (NVIDIA's official `convert_dataset` zip-emitter, runnable as `python -m deepVogue.dataset_tool`), and `tools.py` (its vendored helpers). Don't reimplement any of them. The dataPalette repo at `/Users/juan-garassino/Code/005-products/004-creative-tools/004-dataPalette` is *reference only* — not a runtime dependency.
 
 ## Conventions specific to this repo
 

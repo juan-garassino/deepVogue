@@ -6,7 +6,7 @@ Subcommands:
 
 Frame extraction is inline via ffmpeg (subprocess). Deduplication uses an
 8x8 average-hash + Hamming distance. The final zip is produced by NVIDIA's
-existing convert_dataset (deepVogue/dataset_tool.py), which we never reimplement.
+existing convert_dataset (deepVogue/dataset_tool/convert.py), which we never reimplement.
 
 Drive paths come from DV_* env vars resolved by deepVogue._paths. Override on
 the CLI with --source / --out when needed.
