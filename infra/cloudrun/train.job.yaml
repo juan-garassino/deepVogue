@@ -60,7 +60,7 @@ spec:
                 - name: DV_AUTO_RESUME
                   value: '1'
                 - name: DV_TARGET_KIMG
-                  value: '200'
+                  value: '500'
                 - name: DV_SCHEDULER
                   value: deepvogue-train-chain
                 - name: GCP_PROJECT
