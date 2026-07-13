@@ -169,9 +169,21 @@ make train-slice-logs GCP_PROJECT=garassino-ml
 # dataset/hparams (deliberate: the YAML is the record of what ran).
 ```
 
-Cost ≈ €1/slice. Unattended Cloud Scheduler chaining (deep-sculpt runs six
-such chains) is deliberately not wired until resume + quality are verified —
-when it is, mind that both projects draw from the same per-project L4 quota.
+Cost ≈ €1/slice. **Unattended chaining** is wired via Cloud Scheduler
+`deepvogue-train-chain` (`0 * * * *`, europe-west1) → job `:run` (compute
+default SA, already `roles/editor`). Two self-guards keep it from running away:
+`DV_TARGET_KIMG` turns over-target slices into ~seconds no-ops, and the
+target-reached slice pauses its own scheduler (`DV_SCHEDULER`) so nothing bills
+after. Ops:
+
+```bash
+gcloud scheduler jobs pause  deepvogue-train-chain --location=europe-west1 --project=garassino-ml
+gcloud scheduler jobs resume deepvogue-train-chain --location=europe-west1 --project=garassino-ml
+gcloud scheduler jobs run    deepvogue-train-chain --location=europe-west1 --project=garassino-ml  # fire one now
+```
+
+Mind that deepVogue and deep-sculpt draw from the same per-project L4 quota;
+the hourly cadence vs ~52-min slices leaves ~8 min of headroom.
 
 ---
 
