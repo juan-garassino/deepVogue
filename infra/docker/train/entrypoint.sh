@@ -28,6 +28,11 @@
 #   DV_METRICS        train.py --metrics (default fid50k_full; use "none" on
 #                     1h slices — fid50k eats most of a slice)
 #   DV_SNAP           train.py --snap in ticks (default 50; use 2-4 on slices)
+#   DV_CBASE          train.py --cbase; MUST match the resume pkl's capacity
+#                     (NVIDIA's *-256x256 pretrained pkls use 16384, train.py
+#                     defaults to 32768 — mismatch fails net construction)
+#   DV_CMAX           train.py --cmax (default 512)
+#   DV_MIRROR         train.py --mirror (dataset x-flips; default false)
 #   DV_FAKE_TRAIN     if set to 1, skip GPU code + emit stub pkl (CI smoke)
 #   SYNC_INTERVAL     seconds between rsync ticks (default 60)
 #   MLFLOW_TRACKING_URI / SLACK_WEBHOOK_URL passed through
@@ -176,7 +181,12 @@ mirror_loop &
 MIRROR_PID=$!
 
 # ---------- 6. train ----------
-log "starting train.py cfg=$DV_CFG res=$DV_RES kimg=$DV_KIMG gamma=$DV_GAMMA batch=$DV_BATCH"
+EXTRA_ARGS=()
+[ -n "${DV_CBASE:-}" ] && EXTRA_ARGS+=(--cbase="$DV_CBASE")
+[ -n "${DV_CMAX:-}" ] && EXTRA_ARGS+=(--cmax="$DV_CMAX")
+[ -n "${DV_MIRROR:-}" ] && EXTRA_ARGS+=(--mirror="$DV_MIRROR")
+
+log "starting train.py cfg=$DV_CFG res=$DV_RES kimg=$DV_KIMG gamma=$DV_GAMMA batch=$DV_BATCH extra=${EXTRA_ARGS[*]:-none}"
 python deepVogue/train.py \
     --outdir="$RUNDIR" \
     --data="$DATASET" \
@@ -187,6 +197,7 @@ python deepVogue/train.py \
     --batch="$DV_BATCH" \
     --metrics="${DV_METRICS:-fid50k_full}" \
     --snap="${DV_SNAP:-50}" \
+    "${EXTRA_ARGS[@]}" \
     "${RESUME_ARGS[@]}"
 
 # ---------- 7. final mirror + publish ----------

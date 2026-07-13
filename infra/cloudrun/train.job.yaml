@@ -51,6 +51,8 @@ spec:
                   value: '16'
                 - name: DV_GAMMA
                   value: '1.0'
+                - name: DV_CBASE
+                  value: '16384'
                 - name: DV_METRICS
                   value: none
                 - name: DV_SNAP
