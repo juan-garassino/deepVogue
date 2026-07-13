@@ -144,6 +144,35 @@ Pick RunPod for big GPUs at spot prices (H100); pick Vertex when you want the
 job inside `garassino-ml` (budget alerts cover it, logs in Cloud Logging, no
 SA key to mint or rotate).
 
+### Cloud Run Job (L4 slices; zero-bootstrap path — added 2026-07-13)
+
+The lightest path: no `gcp-setup`, no quota request, no SA key. Piggybacks on
+the house resources deep-sculpt already uses in `garassino-ml` — the
+`ml-images` AR repo, the `gs://garassino-ml-artifacts` bucket, the compute
+default SA, and the Cloud Run L4 allocation. The catch: GPU executions cap at
+**3600s**, so training runs as ~1h slices; each slice resumes from the latest
+snapshot mirrored by the previous one (`DV_AUTO_RESUME=1` in
+`infra/cloudrun/train.job.yaml`; per-slice GCS subdirs under
+`$DV_RUN_URI/slices/`).
+
+```bash
+# Once (or after changing the image/entrypoint):
+make build-train-image GCP_PROJECT=garassino-ml   # Cloud Build → AR ml-images
+make deploy-train-job  GCP_PROJECT=garassino-ml   # jobs replace train.job.yaml
+
+# One slice (~40 kimg at 256 on L4, ends cleanly inside the hour):
+make train-slice GCP_PROJECT=garassino-ml
+make train-slice-logs GCP_PROJECT=garassino-ml
+
+# Repeat train-slice until FID/visuals plateau; then register/publish the
+# latest snapshot manually. Edit env in train.job.yaml + redeploy to change
+# dataset/hparams (deliberate: the YAML is the record of what ran).
+```
+
+Cost ≈ €1/slice. Unattended Cloud Scheduler chaining (deep-sculpt runs six
+such chains) is deliberately not wired until resume + quality are verified —
+when it is, mind that both projects draw from the same per-project L4 quota.
+
 ---
 
 ## 4. Failure modes (runbook)

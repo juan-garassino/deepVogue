@@ -21,6 +21,13 @@
 #
 # Optional:
 #   DV_RESUME_FROM    gs:// URI of a network-snapshot-*.pkl to resume from
+#   DV_AUTO_RESUME    if 1 (Cloud Run slice mode): mirror into a per-slice
+#                     subdir of DV_RUN_URI and resume from the latest snapshot
+#                     across all previous slices; DV_RESUME_FROM is only the
+#                     cold-start fallback (e.g. a pretrained pkl)
+#   DV_METRICS        train.py --metrics (default fid50k_full; use "none" on
+#                     1h slices — fid50k eats most of a slice)
+#   DV_SNAP           train.py --snap in ticks (default 50; use 2-4 on slices)
 #   DV_FAKE_TRAIN     if set to 1, skip GPU code + emit stub pkl (CI smoke)
 #   SYNC_INTERVAL     seconds between rsync ticks (default 60)
 #   MLFLOW_TRACKING_URI / SLACK_WEBHOOK_URL passed through
@@ -134,17 +141,35 @@ PY
 log "fetching dataset $DV_DATASET_URI -> $DATASET"
 gsutil -q -m cp "$DV_DATASET_URI" "$DATASET"
 
+# Slice mode (Cloud Run 1h GPU jobs): train.py restarts run-dir numbering at
+# 00000- every container, so consecutive slices rsynced into one prefix would
+# overwrite each other's snapshots. Give each slice its own subdir and resume
+# from the lexically-last snapshot across all of them (timestamped dirs sort
+# chronologically, snapshot names sort by kimg within a dir).
+MIRROR_URI="$DV_RUN_URI"
+RESUME_SRC="${DV_RESUME_FROM:-}"
+if [ "${DV_AUTO_RESUME:-0}" = "1" ]; then
+    MIRROR_URI="${DV_RUN_URI%/}/slices/$(date -u +%Y%m%dT%H%M%SZ)"
+    LATEST_SNAP=$(gsutil ls "${DV_RUN_URI%/}/slices/**network-snapshot-*.pkl" 2>/dev/null | sort | tail -1 || true)
+    if [ -n "$LATEST_SNAP" ]; then
+        log "auto-resume: latest slice snapshot is $LATEST_SNAP"
+        RESUME_SRC="$LATEST_SNAP"
+    else
+        log "auto-resume: no prior slice snapshots; falling back to DV_RESUME_FROM=${RESUME_SRC:-<unset>}"
+    fi
+fi
+
 RESUME_ARGS=()
-if [ -n "${DV_RESUME_FROM:-}" ]; then
-    log "fetching resume checkpoint $DV_RESUME_FROM"
-    gsutil -q cp "$DV_RESUME_FROM" "$WORKDIR/resume.pkl"
+if [ -n "$RESUME_SRC" ]; then
+    log "fetching resume checkpoint $RESUME_SRC"
+    gsutil -q cp "$RESUME_SRC" "$WORKDIR/resume.pkl"
     RESUME_ARGS=(--resume="$WORKDIR/resume.pkl")
 fi
 
 # ---------- 5. background snapshot mirror ----------
 mirror_loop() {
     while sleep "$SYNC_INTERVAL"; do
-        gsutil -q -m rsync -r "$RUNDIR" "$DV_RUN_URI" || log "rsync tick failed (continuing)"
+        gsutil -q -m rsync -r "$RUNDIR" "$MIRROR_URI" || log "rsync tick failed (continuing)"
     done
 }
 mirror_loop &
@@ -160,13 +185,14 @@ python deepVogue/train.py \
     --kimg="$DV_KIMG" \
     --gamma="$DV_GAMMA" \
     --batch="$DV_BATCH" \
-    --metrics=fid50k_full \
+    --metrics="${DV_METRICS:-fid50k_full}" \
+    --snap="${DV_SNAP:-50}" \
     "${RESUME_ARGS[@]}"
 
 # ---------- 7. final mirror + publish ----------
 kill "$MIRROR_PID" 2>/dev/null || true
-log "final rsync $RUNDIR -> $DV_RUN_URI"
-gsutil -q -m rsync -r "$RUNDIR" "$DV_RUN_URI"
+log "final rsync $RUNDIR -> $MIRROR_URI"
+gsutil -q -m rsync -r "$RUNDIR" "$MIRROR_URI"
 
 if [ -n "${DV_PUBLISH_TARGET:-}" ]; then
     log "publishing $DV_MODEL_ID -> $DV_PUBLISH_TARGET"

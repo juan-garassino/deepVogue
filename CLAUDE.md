@@ -140,6 +140,17 @@ Per-tick MLflow logging from the pod is **deferred to v2** (IAP id-token broker 
 
 **Reference / lineage:** the container shape (CUDA-devel base + scripted entrypoint + `make build`/`push`/`run`/`logs` targets) is modeled on `../../020-autoresearch/` (`Dockerfile` + `entrypoint.sh`). deepVogue differs in three ways: no Claude-in-the-loop (plain training job, not autonomous research), GCS-backed data + outputs instead of in-container state, and self-terminate via RunPod GraphQL so the orchestrator can `_wait` on pod disappearance.
 
+### Cloud Run training backend (L4 slices)
+
+The cheapest GPU path (added 2026-07-13, modeled on deep-sculpt's post-RunPod pivot): a Cloud Run Job `deepvogue-train` in `garassino-ml`/`europe-west1` on 1× NVIDIA L4 (8 CPU / 32Gi, gen2, `--max-retries 0`), hard-capped at **3600s per execution**, so training runs as **1h slices** that each resume from the previous slice's latest snapshot. Same train image + entrypoint as RunPod/Vertex; auth is ambient ADC via the compute default SA (no SA key — this path does NOT need the RunPod `trainer-key.json` exception).
+
+- **Job spec:** `infra/cloudrun/train.job.yaml` (PROJECT_ID/PROJECT_NUMBER seded at deploy). Image: `europe-west1-docker.pkg.dev/garassino-ml/ml-images/deepvogue-train:latest`, built server-side by `infra/cloudrun/cloudbuild.train.yaml` (Cloud Run can't pull GHCR).
+- **Slice mechanics:** `DV_AUTO_RESUME=1` makes the entrypoint mirror into `DV_RUN_URI/slices/<utc-ts>/` (train.py restarts run-dir numbering at `00000-` per container, so a shared prefix would overwrite snapshots across slices) and resume from the lexically-last `network-snapshot-*.pkl` across all slice dirs; `DV_RESUME_FROM` is only the cold-start init (e.g. a pretrained NVIDIA pkl for transfer learning). `DV_METRICS=none` + `DV_SNAP=2` on slices — fid50k at snapshot ticks would eat the hour. Size `DV_KIMG` to finish inside the slice (~40 kimg at 256 on L4) so the clean-exit rsync always runs.
+- **Bucket layout (house pattern, not the `gs://deepvogue-*` set):** this path uses `gs://garassino-ml-artifacts/deepvogue/{data/raw,datasets,pretrained,runs}` to piggyback on existing buckets/IAM with zero `gcp-setup`. The `gs://deepvogue-*` layout remains the target for the full stack.
+- **Targets:** `make build-train-image` / `deploy-train-job` / `train-slice` / `train-slice-logs` (all take `GCP_PROJECT=garassino-ml`).
+- **First model:** `interstella256` — Interstella 5555 frames at 256px/2fps, transfer from `stylegan3-t-ffhqu-256x256.pkl`, batch 16, gamma 1.0.
+- Unattended Cloud Scheduler chaining (deep-sculpt style) is deliberately **not** wired yet — slices are executed manually until resume + quality are proven. Note: deepVogue and deep-sculpt share the project's L4 quota.
+
 ### Inference container
 
 The Cloud Run inference image (`infra/docker/inference/Dockerfile`) ships from a **CUDA devel base** (`pytorch/pytorch:2.4.0-cuda12.1-cudnn9-devel`) because the SG3 custom ops at `deepVogue/pytorch_utils/ops/{bias_act,upfirdn2d}.py` JIT-compile via `torch.utils.cpp_extension.load()` at *import time* — without `nvcc` the FastAPI warmup raises on the first model load. Trade-off: image is ~2-3GB larger than runtime-only; well within Cloud Run's 32GB limit.
@@ -280,3 +291,4 @@ Everything dataset lives in the `dataset_tool/` package: `prepare.py` (the `deep
 - Network checkpoints are `.pkl` files containing the full module (via `pytorch_utils/persistence.py`); they embed source code, so loading old pickles requires `legacy.py`. `legacy.py` aliases `torch_utils`/`dnnlib` in `sys.modules` so official NVlabs pretrained pkls unpickle despite this repo's package renames; TF1-era pkls are unsupported (the intercept targets a stale module name).
 - Output artifacts go under `results/` (`results/checkpoints/`, `results/snapshots/`) and `deepVogue/results/` — `make clean` will wipe these, so don't keep anything precious there.
 - The audio-reactive / latent-walk notebooks rely on `OpenSimplex` (already in `generate.py`'s `OSN` class) for smooth noise trajectories. Reuse `OSN` rather than rolling new noise generators when adding walk modes.
+- **Every package dir needs `__init__.py`.** `find_packages()` silently drops dirs without one — the top-level `deepVogue/` package was uninstallable for years and nobody noticed because the Makefile's `PYTHONPATH=.` and pytest's rootdir masked it with namespace imports. CI's honest `pip install -e .` import is the guard; don't reintroduce `PYTHONPATH`-only code paths.

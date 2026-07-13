@@ -1,0 +1,65 @@
+# Cloud Run Job: 1h L4 training slices, deep-sculpt house pattern.
+# Deploy with `make deploy-train-job` (seds PROJECT_ID / PROJECT_NUMBER);
+# run one slice with `make train-slice`.
+#
+# Slice semantics: DV_KIMG is the per-slice budget, sized to finish inside the
+# 3600s task timeout so the final rsync + clean exit always run. DV_AUTO_RESUME
+# makes each slice resume from the latest snapshot of any previous slice;
+# DV_RESUME_FROM is only the cold-start init (NVIDIA ffhq-u-256 transfer).
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: deepvogue-train
+  labels:
+    cloud.googleapis.com/location: europe-west1
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/gpu-zonal-redundancy-disabled: 'true'
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 0
+          timeoutSeconds: '3600'
+          serviceAccountName: PROJECT_NUMBER-compute@developer.gserviceaccount.com
+          nodeSelector:
+            run.googleapis.com/accelerator: nvidia-l4
+          containers:
+            - image: europe-west1-docker.pkg.dev/PROJECT_ID/ml-images/deepvogue-train:latest
+              resources:
+                limits:
+                  cpu: '8'
+                  memory: 32Gi
+                  nvidia.com/gpu: '1'
+              env:
+                - name: DV_DATASET_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.zip
+                - name: DV_RUN_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256
+                - name: DV_MODEL_ID
+                  value: interstella256
+                - name: DV_CFG
+                  value: stylegan3-t
+                - name: DV_RES
+                  value: '256'
+                - name: DV_KIMG
+                  value: '40'
+                - name: DV_BATCH
+                  value: '16'
+                - name: DV_GAMMA
+                  value: '1.0'
+                - name: DV_METRICS
+                  value: none
+                - name: DV_SNAP
+                  value: '2'
+                - name: DV_AUTO_RESUME
+                  value: '1'
+                - name: DV_RESUME_FROM
+                  value: gs://garassino-ml-artifacts/deepvogue/pretrained/stylegan3-t-ffhqu-256x256.pkl
+                - name: SYNC_INTERVAL
+                  value: '120'
+                - name: PYTORCH_CUDA_ALLOC_CONF
+                  value: expandable_segments:True
