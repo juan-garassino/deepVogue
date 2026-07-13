@@ -326,7 +326,7 @@ nano-smoke: ## Run the local-nano integration smoke against a running stack
 	python scripts/run_nano_smoke.py
 
 # === MLOps stack — GCP deploy ===
-.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget deploy-db-secrets gcp-setup gcp-setup-op publish publish-dataset show destroy build-train-image deploy-train-job train-slice train-slice-logs
+.PHONY: deploy-inference deploy-mlflow deploy-prefect deploy-monitoring deploy-budget deploy-db-secrets gcp-setup gcp-setup-op publish publish-dataset show destroy build-train-image deploy-train-job train-slice train-slice-logs deploy-project-job project-run
 
 GCP_REGION ?= europe-west1
 GCP_AR := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/deepvogue
@@ -387,6 +387,18 @@ train-slice-logs: ## Recent logs from deepvogue-train executions (newest first)
 	gcloud --project=$(GCP_PROJECT) logging read \
 	  'resource.type=cloud_run_job AND resource.labels.job_name=deepvogue-train' \
 	  --freshness=3h --limit=80 --format='value(timestamp,textPayload)'
+
+deploy-project-job: ## Create/update the deepvogue-project L4 job (latent-cinema anchors)
+	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)
+	@NUM=$$(gcloud projects describe $(GCP_PROJECT) --format='value(projectNumber)'); \
+	test -n "$$NUM" || (echo "could not resolve project number for $(GCP_PROJECT)" && exit 1); \
+	sed -e "s|PROJECT_ID|$(GCP_PROJECT)|g" -e "s|PROJECT_NUMBER|$$NUM|g" \
+	  infra/cloudrun/project.job.yaml | \
+	  gcloud --project=$(GCP_PROJECT) run jobs replace - --region=$(GCP_REGION)
+
+project-run: ## Execute one projection slice (resumes; skips already-projected anchors)
+	@test -n "$(GCP_PROJECT)" || (echo "set GCP_PROJECT" && exit 1)
+	gcloud --project=$(GCP_PROJECT) run jobs execute deepvogue-project --region=$(GCP_REGION)
 
 gcp-setup-op: ## One-time: bootstrap garassino-op (WIF + TF state + log sink + secrets)
 	@test -n "$$GITHUB_REPO" || (echo "set GITHUB_REPO=owner/repo" && exit 1)
