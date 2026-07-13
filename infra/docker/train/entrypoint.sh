@@ -25,6 +25,9 @@
 #                     subdir of DV_RUN_URI and resume from the latest snapshot
 #                     across all previous slices; DV_RESUME_FROM is only the
 #                     cold-start fallback (e.g. a pretrained pkl)
+#   DV_TARGET_KIMG    unattended-chain cost cap: in auto-resume mode, no-op
+#                     exit once cumulative kimg (completed slices × DV_KIMG)
+#                     reaches this. Unset on manual one-off slices.
 #   DV_METRICS        train.py --metrics (default fid50k_full; use "none" on
 #                     1h slices — fid50k eats most of a slice)
 #   DV_SNAP           train.py --snap in ticks (default 50; use 2-4 on slices)
@@ -124,6 +127,23 @@ if [ -n "${GOOGLE_APPLICATION_CREDENTIALS_JSON:-}" ]; then
     log "gcloud auth: SA key — $(gcloud config get-value account 2>/dev/null)"
 else
     log "gcloud auth: no SA key in env — using ambient ADC (Vertex/GCE metadata)"
+fi
+
+# ---------- 2.5 target-kimg self-limit (unattended-chain cost cap) ----------
+# When a Cloud Scheduler fires slices unattended, this is the hard stop:
+# count completed slices (each mirrors one final network-snapshot-<DV_KIMG>.pkl)
+# and no-op exit once cumulative kimg reaches DV_TARGET_KIMG. Runs before GPU
+# warmup + the 1 GB dataset pull so an over-target fire is a ~seconds no-op.
+# Only active in auto-resume (chain) mode; a one-off manual slice ignores it.
+if [ -n "${DV_TARGET_KIMG:-}" ] && [ "${DV_AUTO_RESUME:-0}" = "1" ]; then
+    FINAL_SNAP=$(printf 'network-snapshot-%06d.pkl' "$DV_KIMG")
+    DONE=$(gsutil ls "${DV_RUN_URI%/}/slices/**/${FINAL_SNAP}" 2>/dev/null | grep -c . || true)
+    CUM=$(( DONE * DV_KIMG ))
+    if [ "$CUM" -ge "$DV_TARGET_KIMG" ]; then
+        log "target reached: ~${CUM} kimg done (>= DV_TARGET_KIMG=${DV_TARGET_KIMG}); no-op exit"
+        exit 0
+    fi
+    log "chain progress: ~${CUM}/${DV_TARGET_KIMG} kimg done; training this slice"
 fi
 
 # ---------- 3. GPU + custom-ops warmup (fail fast on CUDA mismatch) ----------

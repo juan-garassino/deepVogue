@@ -46,7 +46,7 @@ spec:
                 - name: DV_RES
                   value: '256'
                 - name: DV_KIMG
-                  value: '40'
+                  value: '32'
                 - name: DV_BATCH
                   value: '16'
                 - name: DV_GAMMA
@@ -59,6 +59,8 @@ spec:
                   value: '2'
                 - name: DV_AUTO_RESUME
                   value: '1'
+                - name: DV_TARGET_KIMG
+                  value: '200'
                 - name: DV_RESUME_FROM
                   value: gs://garassino-ml-artifacts/deepvogue/pretrained/stylegan3-t-ffhqu-256x256.pkl
                 - name: SYNC_INTERVAL
