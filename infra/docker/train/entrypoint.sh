@@ -28,6 +28,10 @@
 #   DV_TARGET_KIMG    unattended-chain cost cap: in auto-resume mode, no-op
 #                     exit once cumulative kimg (completed slices × DV_KIMG)
 #                     reaches this. Unset on manual one-off slices.
+#   DV_SCHEDULER      name of the Cloud Scheduler job driving the chain; when
+#                     DV_TARGET_KIMG is hit, the slice pauses it so no further
+#                     no-op fires are billed. Needs GCP_PROJECT / GCP_REGION
+#                     and the runtime SA's editor (cloudscheduler) permission.
 #   DV_METRICS        train.py --metrics (default fid50k_full; use "none" on
 #                     1h slices — fid50k eats most of a slice)
 #   DV_SNAP           train.py --snap in ticks (default 50; use 2-4 on slices)
@@ -141,6 +145,16 @@ if [ -n "${DV_TARGET_KIMG:-}" ] && [ "${DV_AUTO_RESUME:-0}" = "1" ]; then
     CUM=$(( DONE * DV_KIMG ))
     if [ "$CUM" -ge "$DV_TARGET_KIMG" ]; then
         log "target reached: ~${CUM} kimg done (>= DV_TARGET_KIMG=${DV_TARGET_KIMG}); no-op exit"
+        # Self-terminate the unattended chain so it stops firing (no-op slices
+        # still cost ~a minute of L4 each). Best-effort: needs a scheduler name
+        # + the runtime SA's editor role; never blocks the clean exit.
+        if [ -n "${DV_SCHEDULER:-}" ]; then
+            log "pausing Cloud Scheduler ${DV_SCHEDULER}"
+            gcloud scheduler jobs pause "$DV_SCHEDULER" \
+                --project="${GCP_PROJECT:-garassino-ml}" \
+                --location="${GCP_REGION:-europe-west1}" --quiet \
+                2>/dev/null || log "scheduler pause skipped/failed (continuing)"
+        fi
         exit 0
     fi
     log "chain progress: ~${CUM}/${DV_TARGET_KIMG} kimg done; training this slice"

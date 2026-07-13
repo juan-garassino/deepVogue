@@ -61,6 +61,12 @@ spec:
                   value: '1'
                 - name: DV_TARGET_KIMG
                   value: '200'
+                - name: DV_SCHEDULER
+                  value: deepvogue-train-chain
+                - name: GCP_PROJECT
+                  value: garassino-ml
+                - name: GCP_REGION
+                  value: europe-west1
                 - name: DV_RESUME_FROM
                   value: gs://garassino-ml-artifacts/deepvogue/pretrained/stylegan3-t-ffhqu-256x256.pkl
                 - name: SYNC_INTERVAL
