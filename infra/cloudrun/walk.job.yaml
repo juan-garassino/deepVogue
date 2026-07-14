@@ -55,12 +55,12 @@ spec:
                 - name: DV_FRAMES_INDEX_URI
                   value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.frames_index.json
                 - name: DV_ANCHORS_URI
-                  value: gs://garassino-ml-artifacts/deepvogue/anchors/interstella256_final
+                  value: gs://garassino-ml-artifacts/deepvogue/anchors/interstella256_dense
                 - name: DV_WALK_URI
-                  value: gs://garassino-ml-artifacts/deepvogue/walks/interstella256_final.mp4
+                  value: gs://garassino-ml-artifacts/deepvogue/walks/interstella256_dense.mp4
                 - name: DV_WALK_FPS
                   value: '24'
                 - name: DV_FPS_PER_SEG
-                  value: '16'
+                  value: '8'
                 - name: PYTORCH_CUDA_ALLOC_CONF
                   value: expandable_segments:True
