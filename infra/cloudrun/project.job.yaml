@@ -43,13 +43,13 @@ spec:
                 - name: DV_FRAMES_INDEX_URI
                   value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.frames_index.json
                 - name: DV_NETWORK_URI
-                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256/slices/20260713T150238Z/00000-stylegan3-t-dataset-gpus1-batch16-gamma1/network-snapshot-000032.pkl
+                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256/slices/20260713T200256Z/00000-stylegan3-t-dataset-gpus1-batch16-gamma1/network-snapshot-000032.pkl
                 - name: DV_ANCHORS_URI
-                  value: gs://garassino-ml-artifacts/deepvogue/anchors/interstella256_val
+                  value: gs://garassino-ml-artifacts/deepvogue/anchors/interstella256_final
                 - name: DV_PROJ_STRIDE
-                  value: '128'
+                  value: '16'
                 - name: DV_PROJ_STEPS
-                  value: '250'
+                  value: '300'
                 - name: SYNC_INTERVAL
                   value: '120'
                 - name: PYTORCH_CUDA_ALLOC_CONF
