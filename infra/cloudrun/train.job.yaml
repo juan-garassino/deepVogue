@@ -38,9 +38,9 @@ spec:
                 - name: DV_DATASET_URI
                   value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.zip
                 - name: DV_RUN_URI
-                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256
+                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256_ft
                 - name: DV_MODEL_ID
-                  value: interstella256
+                  value: interstella256_ft
                 - name: DV_CFG
                   value: stylegan3-t
                 - name: DV_RES
@@ -60,7 +60,9 @@ spec:
                 - name: DV_AUTO_RESUME
                   value: '1'
                 - name: DV_TARGET_KIMG
-                  value: '500'
+                  value: '200'
+                - name: DV_MIRROR
+                  value: 'true'
                 - name: DV_SCHEDULER
                   value: deepvogue-train-chain
                 - name: GCP_PROJECT
@@ -68,7 +70,7 @@ spec:
                 - name: GCP_REGION
                   value: europe-west1
                 - name: DV_RESUME_FROM
-                  value: gs://garassino-ml-artifacts/deepvogue/pretrained/stylegan3-t-ffhqu-256x256.pkl
+                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256/slices/20260713T200256Z/00000-stylegan3-t-dataset-gpus1-batch16-gamma1/network-snapshot-000032.pkl
                 - name: SYNC_INTERVAL
                   value: '120'
                 - name: PYTORCH_CUDA_ALLOC_CONF
