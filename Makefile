@@ -119,6 +119,16 @@ train:
 	    --mirror $(DV_MIRROR) --aug $(DV_AUG) --kimg $(DV_KIMG) \
 	    $${DV_NETWORK_PKL:+--resume $$DV_NETWORK_PKL}
 
+# 3-stage latent-diffusion training (NEW subsystem, parallel to StyleGAN3).
+# GPU-only + NEEDS-GPU-VALIDATION: the CLI refuses to run on CPU unless
+# DV_DIT_ALLOW_CPU=1 (scaffold smoke only). DV_DIT_BACKBONE = latte | dit.
+DV_DIT_BACKBONE ?= latte
+DV_DIT_DEVICE   ?= cuda
+train-diffusion: ## Run the 3-stage DiT/Latte diffusion trainer (GPU; see PR RunPod checklist)
+	$(PY) -m deepVogue.diffusion.training_loop_dit \
+	    --backbone $(DV_DIT_BACKBONE) \
+	    --device $(DV_DIT_DEVICE)
+
 # Pull NVIDIA SG3-t pretrained checkpoints into Drive for fine-tune resume.
 # Set DV_PRETRAINED_DIR (or fall back to $DV_DRIVE_SYNC/../pretrained).
 download-pretrained:
@@ -297,7 +307,7 @@ count_lines:
 
 .PHONY: install_requirements install_train_requirements colab-install colab-clone \
         check_code black test clean \
-        prepare-stills prepare-frames train resume sync-out latest-pkl models-list \
+        prepare-stills prepare-frames train train-diffusion resume sync-out latest-pkl models-list \
         download-pretrained install-serve serve register bot colab-serve film preview-augment \
         project-frames walk walk-frames walk-stills \
         factors-discover walk-factor blend eval \

@@ -17,6 +17,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The training stack (`deepVogue/train.py`, `deepVogue/training/{training_loop,dataset,loss,augment,networks_stylegan2,networks_stylegan3}.py`, `deepVogue/pytorch_utils/`) is vendored from upstream NVlabs/stylegan3. The legacy SG2-ADA training files are preserved as `*_legacy.py` for reference (not imported), and `deepVogue/training/networks.py` (original SG2-ADA Generator) is kept solely so old `.pkl` checkpoints unpickle correctly through `legacy.py`. Inference/art scripts (projector, walk, factors, blend, cinema) are deepVogue-specific and adapted to the SG3 generator; only Z-space `generate.py` retains SG2-era Schultz features.
 
+A **second, parallel generative engine** — a latent-diffusion subsystem (DiT / Latte over VAE latents) — lives under `deepVogue/diffusion/` as an additive research path for latent-cinema. It is independent of the StyleGAN3 stack; see the "Latent-diffusion subsystem" section below. **NEEDS-GPU-VALIDATION** — scaffold only, never trained.
+
 ### Artistic / Research Vision (project intent)
 
 This repo is being pushed beyond pure ML training toward **data-driven generative art** in the spirit of Refik Anadol — but more science- and data-driven. Concrete directions to keep in mind when proposing changes or new tools:
@@ -274,6 +276,21 @@ The package is the StyleGAN2-ADA-PyTorch codebase split into purpose-named subpa
 All internal imports are package-qualified (`from deepVogue import legacy`, `from deepVogue.pytorch_utils import misc`). The original NVIDIA bare-name style (`import legacy`) was rewritten in bulk so the package works as an editable install on Colab. Mirror the package-qualified style in any new code.
 
 Everything dataset lives in the `dataset_tool/` package: `prepare.py` (the `deepvogue-prepare` CLI — inline ffmpeg frame extraction + avg-hash dedup, no external deps), `convert.py` (NVIDIA's official `convert_dataset` zip-emitter, runnable as `python -m deepVogue.dataset_tool`), and `tools.py` (its vendored helpers). Don't reimplement any of them. The dataPalette repo at `/Users/juan-garassino/Code/005-products/004-creative-tools/004-dataPalette` is *reference only* — not a runtime dependency.
+
+## Latent-diffusion subsystem (`deepVogue/diffusion/`) — NEW, parallel to StyleGAN3
+
+A **second, additive generative engine** lives under `deepVogue/diffusion/`, alongside — not replacing — the vendored StyleGAN3 stack in `deepVogue/training/`. The two subsystems are independent: StyleGAN3 remains the current production engine; diffusion is the latent-cinema research path. It ports the ranked top-3 techniques from the diffusion/DiT reference analysis (`003-knowledge-playgrounds/references/analysis/diffusion-dit.md`).
+
+- `dit.py` — **PixArt-α DiT backbone** with **adaLN-single** (one shared `t_block` produces the 6 modulation vectors; each block owns only a tiny `scale_shift_table` — ~27% fewer params than adaLN-zero) + fixed 2D sin-cos pos-embed + zero-init output/cross-conditioning. `STAGES` + `DiT.freeze_for_stage()` are the hooks for the 3-stage training decomposition. Predicts ε on `(B, C, H, W)` VAE latents.
+- `latte.py` — **Latte variant-1 spatio-temporal factorization**: alternating spatial/temporal DiT blocks over `(B, T, C, H, W)` latent video, with the **per-axis timestep broadcast** (repeat timestep modulation over frames for spatial blocks, over patches for temporal blocks — the subtle bit). Reuses `DiTBlock`/`t_block` from `dit.py`. Uses plain `torch` reshape/permute (no einops dependency). `image_num` is the joint image-video hook (mask wiring is a GPU-validation TODO).
+- `vae_latent.py` — `LatentVAE` (minimal conv VAE with the SD-VAE latent interface: encode `(B,3,H,W)`→scaled `(B,C,H/f,W/f)`, decode, roundtrip) + `encode_and_cache`/`load_cached` for the pre-extracted-feature loop (trainers touch cached latents, never pixels). `from_pretrained` is a GPU-only stub for swapping in a real `diffusers.AutoencoderKL`.
+- `training_loop_dit.py` — `DiTTrainer` orchestrates the **3-stage decomposition** (`pixel` → `alignment` → `aesthetic`, PixArt's budget playbook). Scaffold: wired and shape-testable (runs an optimizer step on random latents) but **not run** — no real dataset/EMA/DDP/GCS. `main()` refuses to run on CPU unless `DV_DIT_ALLOW_CPU=1`.
+
+**Run:** `make train-diffusion` (`DV_DIT_BACKBONE=latte|dit`, `DV_DIT_DEVICE=cuda`). GPU-only — the CLI hard-refuses CPU by default.
+
+**Tests:** `tests/unit/diffusion/test_diffusion_shapes.py` — import + shape checks (DiT/Latte forward, VAE roundtrip, cache roundtrip, 3-stage orchestrator step). CPU-only, no real training.
+
+> **NEEDS-GPU-VALIDATION.** Everything in `deepVogue/diffusion/` is CPU-importable and shape-correct but has **never been trained or validated on a GPU**. The noise schedule is a scaffold linear interpolation (real run needs a proper cosine/linear beta schedule + v-prediction), EMA/DDP/GCS checkpointing are unwired, and the real SD-VAE (`LatentVAE.from_pretrained`) is a stub. Validate on `garassino-ml` (RunPod / Cloud Run L4) before trusting any output. See the RunPod validation checklist on the porting PR.
 
 ## Conventions specific to this repo
 
