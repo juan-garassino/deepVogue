@@ -1,0 +1,56 @@
+# Cloud Run Job: latent-cinema projection (phase 1 — anchors), L4.
+# Same image as deepvogue-train, but the container command is overridden to the
+# projection entrypoint. Slice-friendly: project-frames skips done anchors, so
+# re-running (manually or via a scheduler) resumes until every stride-th frame
+# is projected. Deploy with `make deploy-project-job`; run with `make project-run`.
+#
+# DV_NETWORK_URI must be the FINAL model for the real run — anchors are
+# generator-specific and invalid once the model changes. The value below points
+# at a mid-training snapshot for the first-cut validation only.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: deepvogue-project
+  labels:
+    cloud.googleapis.com/location: europe-west1
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/gpu-zonal-redundancy-disabled: 'true'
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 0
+          timeoutSeconds: '3600'
+          serviceAccountName: PROJECT_NUMBER-compute@developer.gserviceaccount.com
+          nodeSelector:
+            run.googleapis.com/accelerator: nvidia-l4
+          containers:
+            - image: europe-west1-docker.pkg.dev/PROJECT_ID/ml-images/deepvogue-train:latest
+              command: ['bash']
+              args: ['infra/docker/project/entrypoint.sh']
+              resources:
+                limits:
+                  cpu: '8'
+                  memory: 32Gi
+                  nvidia.com/gpu: '1'
+              env:
+                - name: DV_DATASET_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.zip
+                - name: DV_FRAMES_INDEX_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.frames_index.json
+                - name: DV_NETWORK_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256/slices/20260713T200256Z/00000-stylegan3-t-dataset-gpus1-batch16-gamma1/network-snapshot-000032.pkl
+                - name: DV_ANCHORS_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/anchors/interstella256_dense
+                - name: DV_PROJ_STRIDE
+                  value: '4'
+                - name: DV_PROJ_STEPS
+                  value: '300'
+                - name: SYNC_INTERVAL
+                  value: '120'
+                - name: PYTORCH_CUDA_ALLOC_CONF
+                  value: expandable_segments:True

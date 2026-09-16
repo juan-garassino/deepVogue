@@ -1,0 +1,66 @@
+# Cloud Run Job: latent-cinema render (phase 2 — the film), L4.
+# Same image as deepvogue-train/project; command overridden to pull the model +
+# anchors + frames_index, run deepVogue.walk in temporal order, upload the mp4.
+# One-shot (walk of 338 anchors renders well inside the 1h cap on an L4).
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: deepvogue-walk
+  labels:
+    cloud.googleapis.com/location: europe-west1
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/gpu-zonal-redundancy-disabled: 'true'
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 0
+          timeoutSeconds: '3600'
+          serviceAccountName: PROJECT_NUMBER-compute@developer.gserviceaccount.com
+          nodeSelector:
+            run.googleapis.com/accelerator: nvidia-l4
+          containers:
+            - image: europe-west1-docker.pkg.dev/PROJECT_ID/ml-images/deepvogue-train:latest
+              command: ['bash', '-lc']
+              args:
+                - |
+                  set -euo pipefail
+                  cd /app
+                  gsutil -q cp "$DV_NETWORK_URI" /workspace/net.pkl
+                  gsutil -q cp "$DV_FRAMES_INDEX_URI" /workspace/frames_index.json
+                  mkdir -p /workspace/anchors
+                  gsutil -q -m rsync -r "$DV_ANCHORS_URI" /workspace/anchors
+                  echo "anchors: $(find /workspace/anchors -name projected_w.npz | wc -l)"
+                  python -m deepVogue.walk \
+                    --network /workspace/net.pkl \
+                    --anchors /workspace/anchors \
+                    --order   /workspace/frames_index.json \
+                    --out     /workspace/walk.mp4 \
+                    --interp  cubic --noise-mode const \
+                    --fps "${DV_WALK_FPS:-24}" --frames-per-segment "${DV_FPS_PER_SEG:-16}"
+                  gsutil -q cp /workspace/walk.mp4 "$DV_WALK_URI"
+                  echo "uploaded $DV_WALK_URI"
+              resources:
+                limits:
+                  cpu: '8'
+                  memory: 32Gi
+                  nvidia.com/gpu: '1'
+              env:
+                - name: DV_NETWORK_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/runs/interstella256/slices/20260713T200256Z/00000-stylegan3-t-dataset-gpus1-batch16-gamma1/network-snapshot-000032.pkl
+                - name: DV_FRAMES_INDEX_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/datasets/interstella256.frames_index.json
+                - name: DV_ANCHORS_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/anchors/interstella256_dense
+                - name: DV_WALK_URI
+                  value: gs://garassino-ml-artifacts/deepvogue/walks/interstella256_dense.mp4
+                - name: DV_WALK_FPS
+                  value: '24'
+                - name: DV_FPS_PER_SEG
+                  value: '8'
+                - name: PYTORCH_CUDA_ALLOC_CONF
+                  value: expandable_segments:True

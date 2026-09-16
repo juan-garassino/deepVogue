@@ -1,0 +1,15 @@
+# Build the deepVogue train image server-side and push to Artifact Registry
+# (the house `ml-images` repo in garassino-ml) so Cloud Run Jobs can pull it —
+# Cloud Run cannot pull from GHCR.
+#
+#   gcloud builds submit --config infra/cloudrun/cloudbuild.train.yaml \
+#     --project garassino-ml .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "infra/docker/train/Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+timeout: 3600s
+options:
+  machineType: E2_HIGHCPU_8
+substitutions:
+  _IMAGE: europe-west1-docker.pkg.dev/garassino-ml/ml-images/deepvogue-train:latest

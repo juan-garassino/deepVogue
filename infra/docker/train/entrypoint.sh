@@ -21,6 +21,25 @@
 #
 # Optional:
 #   DV_RESUME_FROM    gs:// URI of a network-snapshot-*.pkl to resume from
+#   DV_AUTO_RESUME    if 1 (Cloud Run slice mode): mirror into a per-slice
+#                     subdir of DV_RUN_URI and resume from the latest snapshot
+#                     across all previous slices; DV_RESUME_FROM is only the
+#                     cold-start fallback (e.g. a pretrained pkl)
+#   DV_TARGET_KIMG    unattended-chain cost cap: in auto-resume mode, no-op
+#                     exit once cumulative kimg (completed slices × DV_KIMG)
+#                     reaches this. Unset on manual one-off slices.
+#   DV_SCHEDULER      name of the Cloud Scheduler job driving the chain; when
+#                     DV_TARGET_KIMG is hit, the slice pauses it so no further
+#                     no-op fires are billed. Needs GCP_PROJECT / GCP_REGION
+#                     and the runtime SA's editor (cloudscheduler) permission.
+#   DV_METRICS        train.py --metrics (default fid50k_full; use "none" on
+#                     1h slices — fid50k eats most of a slice)
+#   DV_SNAP           train.py --snap in ticks (default 50; use 2-4 on slices)
+#   DV_CBASE          train.py --cbase; MUST match the resume pkl's capacity
+#                     (NVIDIA's *-256x256 pretrained pkls use 16384, train.py
+#                     defaults to 32768 — mismatch fails net construction)
+#   DV_CMAX           train.py --cmax (default 512)
+#   DV_MIRROR         train.py --mirror (dataset x-flips; default false)
 #   DV_FAKE_TRAIN     if set to 1, skip GPU code + emit stub pkl (CI smoke)
 #   SYNC_INTERVAL     seconds between rsync ticks (default 60)
 #   MLFLOW_TRACKING_URI / SLACK_WEBHOOK_URL passed through
@@ -114,6 +133,33 @@ else
     log "gcloud auth: no SA key in env — using ambient ADC (Vertex/GCE metadata)"
 fi
 
+# ---------- 2.5 target-kimg self-limit (unattended-chain cost cap) ----------
+# When a Cloud Scheduler fires slices unattended, this is the hard stop:
+# count completed slices (each mirrors one final network-snapshot-<DV_KIMG>.pkl)
+# and no-op exit once cumulative kimg reaches DV_TARGET_KIMG. Runs before GPU
+# warmup + the 1 GB dataset pull so an over-target fire is a ~seconds no-op.
+# Only active in auto-resume (chain) mode; a one-off manual slice ignores it.
+if [ -n "${DV_TARGET_KIMG:-}" ] && [ "${DV_AUTO_RESUME:-0}" = "1" ]; then
+    FINAL_SNAP=$(printf 'network-snapshot-%06d.pkl' "$DV_KIMG")
+    DONE=$(gsutil ls "${DV_RUN_URI%/}/slices/**/${FINAL_SNAP}" 2>/dev/null | grep -c . || true)
+    CUM=$(( DONE * DV_KIMG ))
+    if [ "$CUM" -ge "$DV_TARGET_KIMG" ]; then
+        log "target reached: ~${CUM} kimg done (>= DV_TARGET_KIMG=${DV_TARGET_KIMG}); no-op exit"
+        # Self-terminate the unattended chain so it stops firing (no-op slices
+        # still cost ~a minute of L4 each). Best-effort: needs a scheduler name
+        # + the runtime SA's editor role; never blocks the clean exit.
+        if [ -n "${DV_SCHEDULER:-}" ]; then
+            log "pausing Cloud Scheduler ${DV_SCHEDULER}"
+            gcloud scheduler jobs pause "$DV_SCHEDULER" \
+                --project="${GCP_PROJECT:-garassino-ml}" \
+                --location="${GCP_REGION:-europe-west1}" --quiet \
+                2>/dev/null || log "scheduler pause skipped/failed (continuing)"
+        fi
+        exit 0
+    fi
+    log "chain progress: ~${CUM}/${DV_TARGET_KIMG} kimg done; training this slice"
+fi
+
 # ---------- 3. GPU + custom-ops warmup (fail fast on CUDA mismatch) ----------
 nvidia-smi || { log "ERROR: nvidia-smi unavailable"; exit 3; }
 python - <<'PY'
@@ -134,24 +180,47 @@ PY
 log "fetching dataset $DV_DATASET_URI -> $DATASET"
 gsutil -q -m cp "$DV_DATASET_URI" "$DATASET"
 
+# Slice mode (Cloud Run 1h GPU jobs): train.py restarts run-dir numbering at
+# 00000- every container, so consecutive slices rsynced into one prefix would
+# overwrite each other's snapshots. Give each slice its own subdir and resume
+# from the lexically-last snapshot across all of them (timestamped dirs sort
+# chronologically, snapshot names sort by kimg within a dir).
+MIRROR_URI="$DV_RUN_URI"
+RESUME_SRC="${DV_RESUME_FROM:-}"
+if [ "${DV_AUTO_RESUME:-0}" = "1" ]; then
+    MIRROR_URI="${DV_RUN_URI%/}/slices/$(date -u +%Y%m%dT%H%M%SZ)"
+    LATEST_SNAP=$(gsutil ls "${DV_RUN_URI%/}/slices/**network-snapshot-*.pkl" 2>/dev/null | sort | tail -1 || true)
+    if [ -n "$LATEST_SNAP" ]; then
+        log "auto-resume: latest slice snapshot is $LATEST_SNAP"
+        RESUME_SRC="$LATEST_SNAP"
+    else
+        log "auto-resume: no prior slice snapshots; falling back to DV_RESUME_FROM=${RESUME_SRC:-<unset>}"
+    fi
+fi
+
 RESUME_ARGS=()
-if [ -n "${DV_RESUME_FROM:-}" ]; then
-    log "fetching resume checkpoint $DV_RESUME_FROM"
-    gsutil -q cp "$DV_RESUME_FROM" "$WORKDIR/resume.pkl"
+if [ -n "$RESUME_SRC" ]; then
+    log "fetching resume checkpoint $RESUME_SRC"
+    gsutil -q cp "$RESUME_SRC" "$WORKDIR/resume.pkl"
     RESUME_ARGS=(--resume="$WORKDIR/resume.pkl")
 fi
 
 # ---------- 5. background snapshot mirror ----------
 mirror_loop() {
     while sleep "$SYNC_INTERVAL"; do
-        gsutil -q -m rsync -r "$RUNDIR" "$DV_RUN_URI" || log "rsync tick failed (continuing)"
+        gsutil -q -m rsync -r "$RUNDIR" "$MIRROR_URI" || log "rsync tick failed (continuing)"
     done
 }
 mirror_loop &
 MIRROR_PID=$!
 
 # ---------- 6. train ----------
-log "starting train.py cfg=$DV_CFG res=$DV_RES kimg=$DV_KIMG gamma=$DV_GAMMA batch=$DV_BATCH"
+EXTRA_ARGS=()
+[ -n "${DV_CBASE:-}" ] && EXTRA_ARGS+=(--cbase="$DV_CBASE")
+[ -n "${DV_CMAX:-}" ] && EXTRA_ARGS+=(--cmax="$DV_CMAX")
+[ -n "${DV_MIRROR:-}" ] && EXTRA_ARGS+=(--mirror="$DV_MIRROR")
+
+log "starting train.py cfg=$DV_CFG res=$DV_RES kimg=$DV_KIMG gamma=$DV_GAMMA batch=$DV_BATCH extra=${EXTRA_ARGS[*]:-none}"
 python deepVogue/train.py \
     --outdir="$RUNDIR" \
     --data="$DATASET" \
@@ -160,13 +229,15 @@ python deepVogue/train.py \
     --kimg="$DV_KIMG" \
     --gamma="$DV_GAMMA" \
     --batch="$DV_BATCH" \
-    --metrics=fid50k_full \
+    --metrics="${DV_METRICS:-fid50k_full}" \
+    --snap="${DV_SNAP:-50}" \
+    "${EXTRA_ARGS[@]}" \
     "${RESUME_ARGS[@]}"
 
 # ---------- 7. final mirror + publish ----------
 kill "$MIRROR_PID" 2>/dev/null || true
-log "final rsync $RUNDIR -> $DV_RUN_URI"
-gsutil -q -m rsync -r "$RUNDIR" "$DV_RUN_URI"
+log "final rsync $RUNDIR -> $MIRROR_URI"
+gsutil -q -m rsync -r "$RUNDIR" "$MIRROR_URI"
 
 if [ -n "${DV_PUBLISH_TARGET:-}" ]; then
     log "publishing $DV_MODEL_ID -> $DV_PUBLISH_TARGET"
