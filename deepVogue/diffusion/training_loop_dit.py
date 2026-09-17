@@ -8,7 +8,7 @@ PixArt README.md:119): decompose training into cheap-to-expensive stages ---
     3. ``aesthetic`` — short aesthetic finetune (train only the head).
 
 This is how PixArt hits near-SD quality at ~2% of the cost — the budget
-playbook for a €450/mo latent-cinema run on garussino-ml.
+playbook for a €450/mo latent-cinema run on garassino-ml.
 
 This orchestrator is deliberately CPU-importable and shape-testable: the
 optimizer step runs on a tiny random batch so ``run_stage`` / ``run_all`` are
