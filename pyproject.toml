@@ -1,3 +1,51 @@
+[project]
+name = "deepVogue"
+version = "1.0"
+description = "StyleGAN3-t base for latent-cinema and data-driven generative art"
+requires-python = ">=3.10"
+dependencies = [
+  "pip>=21",
+  "setuptools>=42",
+  "wheel>=0.36",
+  "click>=8.0",
+  "tqdm",
+  "psutil",
+  "requests",
+  "six>=1.14",
+  "joblib",
+  "memoized-property",
+  "termcolor",
+  "colorama",
+  "numpy",
+  "scipy",
+  "Pillow",
+  "imageio",
+  "imageio-ffmpeg==0.4.3",
+  "opensimplex",
+  "matplotlib",
+  "pytest",
+  "coverage",
+  "flake8",
+  "black",
+]
+
+[project.scripts]
+deepvogue-train = "deepVogue.train:main"
+deepvogue-generate = "deepVogue.generate:generate_images"
+deepvogue-project = "deepVogue.projector:run_projection"
+deepvogue-prepare = "deepVogue.dataset_tool.prepare:cli"
+deepvogue-walk = "deepVogue.walk:main"
+deepvogue-blend = "deepVogue.blend:main"
+deepvogue-factors = "deepVogue.factors:cli"
+deepvogue-cinema = "deepVogue.cinema:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["deepVogue"]
+
 [tool.black]
 line-length = 88
 target-version = ["py311"]
