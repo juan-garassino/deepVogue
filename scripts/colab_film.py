@@ -91,10 +91,21 @@ def start_training(name: str, target: int, batch: int, gamma: float):
     return proc, sync
 
 
-def render_cut(name: str, kimg: int, stride: int, steps: int, fps_per_seg: int) -> bool:
-    """Project + walk for the first snapshot >= kimg. False if not ready yet."""
+def walk(pkl: Path, anchors: Path, ds: Path, out_mp4: Path, fps_per_seg: int, env: dict, logf) -> None:
+    tmp_mp4 = LOCAL / out_mp4.name
+    subprocess.run([sys.executable, "-m", "deepVogue.walk", "--network", str(pkl), "--anchors", str(anchors),
+                    "--order", str(ds / "frames_index.json"), "--out", str(tmp_mp4), "--interp", "cubic",
+                    "--noise-mode", "const", "--fps", "24", "--frames-per-segment", str(fps_per_seg)],
+                   env=env, stdout=logf, stderr=subprocess.STDOUT, check=True)
+    out_mp4.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(tmp_mp4, out_mp4)
+
+
+def render_cut(name: str, kimg: int, stride: int, steps: int, fps_per_seg: int, ft_steps: int) -> bool:
+    """Project + walk (+ film-tune + walk) for the first snapshot >= kimg. False if not ready yet."""
     out_mp4 = D / "walks" / name / f"{name}_k{kimg:04d}.mp4"
-    if out_mp4.exists():
+    ft_mp4 = out_mp4.with_name(out_mp4.stem + "_ft.mp4")
+    if out_mp4.exists() and (ft_steps <= 0 or ft_mp4.exists()):
         return True
     ready = [(k, p) for k, p in snapshots(name) if k >= kimg]
     if not ready:
@@ -109,19 +120,24 @@ def render_cut(name: str, kimg: int, stride: int, steps: int, fps_per_seg: int) 
     env = {k_: v for k_, v in os.environ.items() if k_ != "DV_DATASET_NAME"}
     env.update(DV_DATASET_DIR=str(ds), DV_NETWORK_PKL=str(pkl), DV_ANCHORS_DIR=str(anchors))
     logf = open(LOCAL / f"cut_{name}_k{kimg:04d}.log", "a")
-    log.info("%s: cut k%d (snapshot %d kimg, stride %d) → projecting", name, kimg, k, stride)
-    subprocess.run([sys.executable, "-m", "deepVogue.cinema", "project-frames",
-                    "--stride", str(stride), "--num-steps", str(steps)],
-                   env=env, stdout=logf, stderr=subprocess.STDOUT, check=True)
-    tmp_mp4 = LOCAL / out_mp4.name
-    log.info("%s: cut k%d → rendering walk", name, kimg)
-    subprocess.run([sys.executable, "-m", "deepVogue.walk", "--network", str(pkl), "--anchors", str(anchors),
-                    "--order", str(ds / "frames_index.json"), "--out", str(tmp_mp4), "--interp", "cubic",
-                    "--noise-mode", "const", "--fps", "24", "--frames-per-segment", str(fps_per_seg)],
-                   env=env, stdout=logf, stderr=subprocess.STDOUT, check=True)
-    out_mp4.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(tmp_mp4, out_mp4)
-    log.info("%s: cut k%d done → %s", name, kimg, out_mp4)
+    if not out_mp4.exists():
+        log.info("%s: cut k%d (snapshot %d kimg, stride %d) → projecting", name, kimg, k, stride)
+        subprocess.run([sys.executable, "-m", "deepVogue.cinema", "project-frames",
+                        "--stride", str(stride), "--num-steps", str(steps)],
+                       env=env, stdout=logf, stderr=subprocess.STDOUT, check=True)
+        log.info("%s: cut k%d → rendering walk", name, kimg)
+        walk(pkl, anchors, ds, out_mp4, fps_per_seg, env, logf)
+        log.info("%s: cut k%d done → %s", name, kimg, out_mp4)
+    if ft_steps > 0 and not ft_mp4.exists():
+        ft_pkl = LOCAL / "pkls" / f"{name}_k{k:04d}_ft.pkl"
+        log.info("%s: cut k%d → film-tuning %d steps", name, kimg, ft_steps)
+        subprocess.run([sys.executable, "-m", "deepVogue.film_tune", "--network", str(pkl), "--anchors", str(anchors),
+                        "--dataset-dir", str(ds), "--out", str(ft_pkl), "--steps", str(ft_steps)],
+                       env=env, stdout=logf, stderr=subprocess.STDOUT, check=True)
+        shutil.copy(ft_pkl.with_suffix(".png"), ft_mp4.with_suffix(".png"))
+        shutil.copy(ft_pkl, D / "runs" / name / ft_pkl.name)
+        walk(ft_pkl, anchors, ds, ft_mp4, fps_per_seg, env, logf)
+        log.info("%s: cut k%d film-tuned → %s", name, kimg, ft_mp4)
     return True
 
 
@@ -141,6 +157,8 @@ def main() -> None:
     ap.add_argument("--cut", type=parse_cut, action="append", default=[], help="NAME:KIMG@STRIDE")
     ap.add_argument("--steps", type=int, default=300, help="projection steps per anchor")
     ap.add_argument("--fps-per-seg", type=int, default=24, help="walk frames between anchors")
+    ap.add_argument("--film-tune-steps", type=int, default=0,
+                    help="also film-tune G on each cut's anchors (deepVogue.film_tune) and render <cut>_ft.mp4")
     args = ap.parse_args()
 
     LOCAL.mkdir(parents=True, exist_ok=True)
@@ -151,9 +169,9 @@ def main() -> None:
     while pending or (proc and proc.poll() is None):
         for cut in list(pending):
             try:
-                if render_cut(*cut, steps=args.steps, fps_per_seg=args.fps_per_seg):
+                if render_cut(*cut, steps=args.steps, fps_per_seg=args.fps_per_seg, ft_steps=args.film_tune_steps):
                     pending.remove(cut)
-            except subprocess.CalledProcessError as e:
+            except subprocess.CalledProcessError:
                 log.exception("cut %s failed (see cut log); dropping it", cut)
                 pending.remove(cut)
         time.sleep(120)
