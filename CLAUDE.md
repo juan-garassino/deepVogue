@@ -77,6 +77,8 @@ Endpoints: `GET /health`, `GET /models`, `GET /status?model=<id>`, `POST /genera
 
 The canonical entry point is `notebooks/deepVogue_colab.ipynb` (cells 00–07: setup → configure → prepare → train → project anchors → walk → factors → eval). Every step in the notebook is a `make` target — the notebook just sets `DV_*` env vars and calls `!make <target>`. The same commands run locally.
 
+**Unattended per-film pipeline (Colab):** `scripts/colab_film.py --train <name> --cut <name>:<kimg>@<stride> ...` trains one film to `--target` kimg (resuming from the newest Drive snapshot; kimg is summed across resumed runs since train.py restarts at 0) and, as snapshots cross each cut's kimg, projects every `<stride>`-th frame and renders `walks/<name>/<name>_k<kimg>.mp4` on Drive. Cuts can target a film trained in another notebook. Launch it detached from one cell; the Colab MCP always opens a fresh notebook and can't reattach, so the script must not need the notebook.
+
 **Bootstrap on Colab is GitHub-clone**: `git clone --depth 1 --branch master $GITHUB_URL /content/deepVogue` followed by `make colab-install` (which `pip install -e .`s the repo with train+serve+bot requirements and apt-installs ffmpeg). Drive holds *data and outputs only* (`/MyDrive/deepVogue/{data,datasets,runs,anchors,walks}/...`); the code is never zipped onto Drive.
 
 ## MLOps stack
