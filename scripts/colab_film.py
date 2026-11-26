@@ -136,7 +136,7 @@ def render_cut(name: str, kimg: int, stride: int, steps: int, fps_per_seg: int, 
                        env=env, stdout=logf, stderr=subprocess.STDOUT, check=True)
         shutil.copy(ft_pkl.with_suffix(".png"), ft_mp4.with_suffix(".png"))
         shutil.copy(ft_pkl, D / "runs" / name / ft_pkl.name)
-        walk(ft_pkl, anchors, ds, ft_mp4, fps_per_seg, env, logf)
+        walk(ft_pkl, ft_pkl.with_suffix(".anchors"), ds, ft_mp4, fps_per_seg, env, logf)
         log.info("%s: cut k%d film-tuned → %s", name, kimg, ft_mp4)
     return True
 
