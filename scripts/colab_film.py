@@ -166,14 +166,21 @@ def main() -> None:
                         handlers=[logging.StreamHandler(), logging.FileHandler(LOCAL / "colab_film.log")])
     proc, sync = start_training(args.train, args.target, args.batch, args.gamma) if args.train else (None, None)
     pending = sorted(args.cut, key=lambda c: c[1])
+    # Plain cuts first (they are what we look at); film-tuning only fills idle rounds,
+    # one cut at a time, so a long tune never delays a newly-ready plain cut by more than one tune.
     while pending or (proc and proc.poll() is None):
-        for cut in list(pending):
-            try:
-                if render_cut(*cut, steps=args.steps, fps_per_seg=args.fps_per_seg, ft_steps=args.film_tune_steps):
+        for ft_round in (False, True):
+            for cut in list(pending):
+                try:
+                    done = render_cut(*cut, steps=args.steps, fps_per_seg=args.fps_per_seg,
+                                      ft_steps=args.film_tune_steps if ft_round else 0)
+                    if done and (ft_round or args.film_tune_steps <= 0):
+                        pending.remove(cut)
+                    if done and ft_round:
+                        break
+                except subprocess.CalledProcessError:
+                    log.exception("cut %s failed (see cut log); dropping it", cut)
                     pending.remove(cut)
-            except subprocess.CalledProcessError:
-                log.exception("cut %s failed (see cut log); dropping it", cut)
-                pending.remove(cut)
         time.sleep(120)
     if proc:
         log.info("training exited with %s", proc.returncode)
