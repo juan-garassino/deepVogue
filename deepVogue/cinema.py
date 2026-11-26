@@ -33,7 +33,10 @@ def cli() -> None:
 @click.option("--projector", "projector_kind", type=click.Choice(["lpips", "vgg"]),
               default="lpips", show_default=True,
               help="lpips = deepVogue.projector (fast); vgg = pbaylies_projector (slower, finer)")
-def project_frames_cmd(stride: int, num_steps: int, projector_kind: str) -> None:
+@click.option("--min-luma", type=float, default=16.0, show_default=True,
+              help="skip frames whose mean luminance (0-255) is below this: fades/black frames "
+                   "make the walk dwell on black. 0 disables.")
+def project_frames_cmd(stride: int, num_steps: int, projector_kind: str, min_luma: float) -> None:
     """For each Nth frame in frames_index.json, project into DV_ANCHORS_DIR.
 
     Loads the generator **once** in-process (vs the old per-frame subprocess
@@ -67,6 +70,7 @@ def project_frames_cmd(stride: int, num_steps: int, projector_kind: str) -> None
 
         n_done = 0
         n_skip = 0
+        n_dark = 0
         total_planned = sum(1 for i, _ in enumerate(idx["frames"]) if i % stride == 0)
         for i, frame in enumerate(idx["frames"]):
             if i % stride:
@@ -82,6 +86,9 @@ def project_frames_cmd(stride: int, num_steps: int, projector_kind: str) -> None
                 continue
 
             img = Image.open(target).convert("RGB").resize((res, res), Image.BICUBIC)
+            if min_luma and float(np.asarray(img.convert("L")).mean()) < min_luma:
+                n_dark += 1
+                continue
             arr = np.asarray(img, dtype=np.uint8).transpose(2, 0, 1)   # (C,H,W)
             t = torch.tensor(arr, dtype=torch.float32, device=device)
 
@@ -97,7 +104,7 @@ def project_frames_cmd(stride: int, num_steps: int, projector_kind: str) -> None
             n_done += 1
             click.echo(f"  [{n_done + n_skip}/{total_planned}] {frame['filename']} → {out_npz.name}")
 
-    click.echo(f"✓ projected {n_done} new anchors ({n_skip} skipped) into {p.anchors_dir}")
+    click.echo(f"✓ projected {n_done} new anchors ({n_skip} skipped, {n_dark} too dark) into {p.anchors_dir}")
 
 
 @cli.command("eval-fid")
