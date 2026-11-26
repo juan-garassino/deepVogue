@@ -25,7 +25,6 @@ extend-exclude = '''
   | ^/deepVogue/projector\.py$
   | ^/deepVogue/style_mixing\.py$
   | ^/deepVogue/train\.py$
-  | ^/deepVogue/train_legacy\.py$
   | ^/deepVogue/walk\.py$
 )
 '''
