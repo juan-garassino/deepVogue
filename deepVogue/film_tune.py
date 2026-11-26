@@ -2,7 +2,7 @@
 
 GAN training only ever shows G the film through D, so it learns "frames like
 these", not the frames. Film-tuning closes that gap after projection: with the
-anchors' w_i frozen, fine-tune G.synthesis so G(w_i) reproduces frame i
+anchors' w_i as the start, jointly fine-tune G.synthesis and per-anchor W+ so G(w_i) reproduces frame i
 (LPIPS + L2). A locality term keeps what a walk visits *between* anchors —
 lerps between temporally adjacent anchors — close to the untuned generator,
 so in-betweens stay smooth instead of collapsing into artifacts.
@@ -10,7 +10,8 @@ so in-betweens stay smooth instead of collapsing into artifacts.
     python -m deepVogue.film_tune --network net.pkl --anchors anchors/ \
         --dataset-dir datasets/spirited256 --out net_ft.pkl --steps 2000
 
-Writes ``<out>.pkl`` (``{"G_ema": G}``, loadable by walk/serve) and
+Writes ``<out>.pkl`` (``{"G_ema": G}``, loadable by walk/serve), the tuned
+per-anchor W+ in ``<out>.anchors/<id>/projected_w.npz`` (walk with these), and
 ``<out>.png`` (rows: target / untuned / tuned for 8 anchors).
 """
 
@@ -32,12 +33,12 @@ log = logging.getLogger(__name__)
 VGG_URL = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metrics/vgg16.pt"
 
 
-def load_pairs(anchors_dir: Path, dataset_dir: Path, res: int) -> tuple[np.ndarray, np.ndarray]:
-    """Anchors in film order → (w [N, L, C] float32, frames [N, 3, H, W] uint8)."""
+def load_pairs(anchors_dir: Path, dataset_dir: Path, res: int) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Anchors in film order → (w [N, L, C] float32, frames [N, 3, H, W] uint8, anchor ids)."""
     from PIL import Image
 
     idx = json.loads((dataset_dir / "frames_index.json").read_text())
-    ws, imgs = [], []
+    ws, imgs, kids = [], [], []
     with zipfile.ZipFile(dataset_dir / "dataset.zip") as zf:
         by_name = {Path(n).name: n for n in zf.namelist()}
         for frame in idx["frames"]:
@@ -45,16 +46,22 @@ def load_pairs(anchors_dir: Path, dataset_dir: Path, res: int) -> tuple[np.ndarr
             if not npz.exists():
                 continue
             ws.append(np.load(npz)["w"][0].astype(np.float32))
+            kids.append(npz.parent.name)
             img = Image.open(io.BytesIO(zf.read(by_name[Path(frame["filename"]).name])))
             img = img.convert("RGB").resize((res, res), Image.BICUBIC)
             imgs.append(np.asarray(img, dtype=np.uint8).transpose(2, 0, 1))
     if not ws:
         raise SystemExit(f"no anchors under {anchors_dir}")
-    return np.stack(ws), np.stack(imgs)
+    return np.stack(ws), np.stack(imgs), kids
 
 
-def tune(G, ws: np.ndarray, imgs: np.ndarray, *, steps: int, batch: int, lr: float,
+def tune(G, ws: np.ndarray, imgs: np.ndarray, *, steps: int, batch: int, lr: float, w_lr: float,
          l2_weight: float, locality_weight: float, device):
+    """Jointly fine-tune G.synthesis and per-anchor W+ (w_lr=0 keeps the anchors' w fixed).
+
+    Returns (G_ref, G_tuned, tuned ws). Measured on SG3-t: weights alone barely move at
+    PTI's 3e-4, W+ alone drifts off-manifold, the joint optimization converges.
+    """
     import torch
     import torch.nn.functional as F
     from deepVogue.neuronal_network_utils import util
@@ -65,18 +72,22 @@ def tune(G, ws: np.ndarray, imgs: np.ndarray, *, steps: int, batch: int, lr: flo
     with util.open_url(VGG_URL) as f:
         vgg = torch.jit.load(f).eval().to(device)
 
-    def lpips(a, b):  # a, b in [0, 255]
-        fa = vgg(a, resize_images=False, return_lpips=True)
-        fb = vgg(b, resize_images=False, return_lpips=True)
+    def lpips(a, b):  # a, b in [0, 255]; NVIDIA's vgg16.pt normalizes its input IN PLACE, so clone
+        fa = vgg(a.clone(), resize_images=False, return_lpips=True)
+        fb = vgg(b.clone(), resize_images=False, return_lpips=True)
         return (fa - fb).square().sum(dim=1)
 
     def synth(net, w):
         return (net.synthesis(w, noise_mode="const") + 1) * 127.5
 
-    W = torch.from_numpy(ws).to(device)
+    W0 = torch.from_numpy(ws).to(device)
+    W = W0.clone().requires_grad_(w_lr > 0)
     X = torch.from_numpy(imgs).to(device)  # uint8 on device; cast per batch
     n = len(W)
-    opt = torch.optim.Adam(G.synthesis.parameters(), lr=lr, betas=(0.9, 0.999))
+    groups = [{"params": G.synthesis.parameters(), "lr": lr}]
+    if w_lr > 0:
+        groups.append({"params": [W], "lr": w_lr})
+    opt = torch.optim.Adam(groups, betas=(0.9, 0.999))
     rng = np.random.default_rng(0)
     for step in range(1, steps + 1):
         i = torch.from_numpy(rng.integers(0, n, batch)).to(device)
@@ -88,29 +99,27 @@ def tune(G, ws: np.ndarray, imgs: np.ndarray, *, steps: int, batch: int, lr: flo
         if locality_weight > 0 and n > 1:
             j = torch.from_numpy(rng.integers(0, n - 1, batch)).to(device)
             t = torch.rand(batch, 1, 1, device=device)
-            w_mid = torch.lerp(W[j], W[j + 1], t)
             with torch.no_grad():
-                ref = synth(G_ref, w_mid)
-            loc = lpips(synth(G, w_mid), ref).mean()
+                ref = synth(G_ref, torch.lerp(W0[j], W0[j + 1], t))
+            loc = lpips(synth(G, torch.lerp(W[j], W[j + 1], t)), ref).mean()
             loss = loss + locality_weight * loc
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
         if step == 1 or step % 100 == 0:
             log.info("step %d/%d  lpips %.4f  l2 %.4f  locality %.4f", step, steps, rec.item(), l2.item(), loc.item())
-    return G_ref, G.eval().requires_grad_(False)
+    return G_ref, G.eval().requires_grad_(False), W.detach().cpu().numpy()
 
 
-def preview(G_ref, G, ws: np.ndarray, imgs: np.ndarray, path: Path, device, k: int = 8) -> None:
+def preview(G_ref, G, ws: np.ndarray, ws_ft: np.ndarray, imgs: np.ndarray, path: Path, device, k: int = 8) -> None:
     import torch
     from PIL import Image
 
     sel = np.linspace(0, len(ws) - 1, min(k, len(ws))).astype(int)
-    w = torch.from_numpy(ws[sel]).to(device)
     rows = [imgs[sel]]
     with torch.no_grad():
-        for net in (G_ref, G):
-            img = (net.synthesis(w, noise_mode="const") + 1) * 127.5
+        for net, w in ((G_ref, ws), (G, ws_ft)):
+            img = (net.synthesis(torch.from_numpy(w[sel]).to(device), noise_mode="const") + 1) * 127.5
             rows.append(img.clamp(0, 255).to(torch.uint8).cpu().numpy())
     grid = np.concatenate([np.concatenate(list(r), axis=2) for r in rows], axis=1)  # [3, 3H, kW]
     Image.fromarray(grid.transpose(1, 2, 0)).save(path)
@@ -122,11 +131,12 @@ def main() -> None:
     ap.add_argument("--anchors", required=True, type=Path, help="dir of <kept_index>/projected_w.npz")
     ap.add_argument("--dataset-dir", required=True, type=Path, help="dir with dataset.zip + frames_index.json")
     ap.add_argument("--out", required=True, type=Path, help="output .pkl (a .png preview is written beside it)")
-    ap.add_argument("--steps", type=int, default=2000)
-    ap.add_argument("--batch", type=int, default=4)
-    ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--steps", type=int, default=6000)
+    ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--lr", type=float, default=3e-3, help="G.synthesis lr (PTI's 3e-4 barely moves SG3)")
+    ap.add_argument("--w-lr", type=float, default=1e-2, help="per-anchor W+ lr; 0 keeps anchors fixed")
     ap.add_argument("--l2-weight", type=float, default=1.0)
-    ap.add_argument("--locality-weight", type=float, default=0.5,
+    ap.add_argument("--locality-weight", type=float, default=0.2,
                     help="pull in-between (lerped) latents toward the untuned G; 0 = pure overfit")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -135,15 +145,19 @@ def main() -> None:
 
     device = _runtime.pick_device()
     G = _runtime.load_generator(args.network, device)
-    ws, imgs = load_pairs(args.anchors, args.dataset_dir, int(G.img_resolution))
+    ws, imgs, kids = load_pairs(args.anchors, args.dataset_dir, int(G.img_resolution))
     log.info("film-tuning on %d anchors for %d steps", len(ws), args.steps)
-    G_ref, G_ft = tune(G, ws, imgs, steps=args.steps, batch=args.batch, lr=args.lr,
-                       l2_weight=args.l2_weight, locality_weight=args.locality_weight, device=device)
+    G_ref, G_ft, ws_ft = tune(G, ws, imgs, steps=args.steps, batch=args.batch, lr=args.lr, w_lr=args.w_lr,
+                              l2_weight=args.l2_weight, locality_weight=args.locality_weight, device=device)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    preview(G_ref, G_ft, ws, imgs, args.out.with_suffix(".png"), device)
+    preview(G_ref, G_ft, ws, ws_ft, imgs, args.out.with_suffix(".png"), device)
+    anchors_out = args.out.with_suffix(".anchors")
+    for kid, w in zip(kids, ws_ft):
+        (anchors_out / kid).mkdir(parents=True, exist_ok=True)
+        np.savez(anchors_out / kid / "projected_w.npz", w=w[None])
     with open(args.out, "wb") as f:
         pickle.dump({"G_ema": copy.deepcopy(G_ft).cpu()}, f)
-    log.info("wrote %s (+ .png preview)", args.out)
+    log.info("wrote %s (+ .png preview, tuned anchors in %s)", args.out, anchors_out)
 
 
 if __name__ == "__main__":
