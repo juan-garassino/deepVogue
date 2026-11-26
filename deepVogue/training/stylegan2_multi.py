@@ -17,7 +17,7 @@ from deepVogue.pytorch_utils.ops import fma
 
 from .networks import FullyConnectedLayer, Conv2dLayer, ToRGBLayer, MappingNetwork
 
-from util.utilgan import hw_scales, fix_size, multimask
+from deepVogue.generative_network_utils.utilgan import hw_scales, fix_size, multimask
 
 
 @misc.profiled_function

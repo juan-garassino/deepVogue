@@ -23,7 +23,7 @@ from deepVogue.pytorch_utils import training_stats
 from deepVogue.pytorch_utils.ops import conv2d_gradfix
 from deepVogue.pytorch_utils.ops import grid_sample_gradfix
 
-import legacy
+from deepVogue import legacy
 from deepVogue.training.metrics import metric_main
 
 #----------------------------------------------------------------------------

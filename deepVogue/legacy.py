@@ -186,7 +186,7 @@ def _populate_module_params(module, *patterns):
 
 # !!! custom
 def custom_generator(data, **ex_kwargs):
-    from training import stylegan2_multi as networks
+    from deepVogue.training import stylegan2_multi as networks
 
     try:  # saved? (with new fix)
         fmap_base = data["G_ema"].synthesis.fmap_base
@@ -286,9 +286,9 @@ def convert_tf_generator(tf_G, custom=False, **ex_kwargs):
 
     # Convert params.
     if custom:
-        from training import stylegan2_multi as networks
+        from deepVogue.training import stylegan2_multi as networks
     else:
-        from training import networks
+        from deepVogue.training import networks
     G = networks.Generator(**kwargs).eval().requires_grad_(False)
     # pylint: disable=unnecessary-lambda
     _populate_module_params(
@@ -430,7 +430,7 @@ def convert_tf_discriminator(tf_D):
     # for name, value in tf_params.items(): print(f'{name:<50s}{list(value.shape)}')
 
     # Convert params.
-    from training import networks
+    from deepVogue.training import networks
 
     D = networks.Discriminator(**kwargs).eval().requires_grad_(False)
     # pylint: disable=unnecessary-lambda

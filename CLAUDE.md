@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **deepVogue** is a **StyleGAN3-t base** (NVIDIA's `stylegan3`) with the latent-cinema features from the SG2-ADA / Schultz lineage ported on top — used as the engine for a data-driven generative-art / latent-cinema project.
 
-The training stack (`deepVogue/train.py`, `deepVogue/training/{training_loop,dataset,loss,augment,networks_stylegan2,networks_stylegan3}.py`, `deepVogue/pytorch_utils/`) is vendored from upstream NVlabs/stylegan3. The legacy SG2-ADA training files are preserved as `*_legacy.py` for reference (not imported), and `deepVogue/training/networks.py` (original SG2-ADA Generator) is kept solely so old `.pkl` checkpoints unpickle correctly through `legacy.py`. Inference/art scripts (projector, walk, factors, blend, cinema) are deepVogue-specific and adapted to the SG3 generator; only Z-space `generate.py` retains SG2-era Schultz features.
+The training stack (`deepVogue/train.py`, `deepVogue/training/{training_loop,dataset,loss,augment,networks_stylegan2,networks_stylegan3}.py`, `deepVogue/pytorch_utils/`) is vendored from upstream NVlabs/stylegan3. The old SG2-ADA training files (`*_legacy.py`) were deleted 2026-11-26 (recover from git history if needed); `deepVogue/training/networks.py` (original SG2-ADA Generator) is kept solely so old `.pkl` checkpoints unpickle correctly through `legacy.py`. Inference/art scripts (projector, walk, factors, blend, cinema) are deepVogue-specific and adapted to the SG3 generator; only Z-space `generate.py` retains SG2-era Schultz features.
 
 A **second, parallel generative engine** — a latent-diffusion subsystem (DiT / Latte over VAE latents) — lives under `deepVogue/diffusion/` as an additive research path for latent-cinema. It is independent of the StyleGAN3 stack; see the "Latent-diffusion subsystem" section below. **NEEDS-GPU-VALIDATION** — scaffold only, never trained.
 
@@ -292,7 +292,7 @@ The package is the StyleGAN2-ADA-PyTorch codebase split into purpose-named subpa
 
 ### Imports
 
-All internal imports are package-qualified (`from deepVogue import legacy`, `from deepVogue.pytorch_utils import misc`). The original NVIDIA bare-name style (`import legacy`) was rewritten in bulk so the package works as an editable install on Colab. Mirror the package-qualified style in any new code.
+All internal imports are package-qualified (`from deepVogue import legacy`, `from deepVogue.pytorch_utils import misc`). The original NVIDIA bare-name style (`import legacy`) was rewritten in bulk so the package works as an editable install on Colab. Mirror the package-qualified style in any new code. Since 2026-11-26 there are no bare imports left (incl. `legacy.py`, `calc_metrics.py`, `stylegan2_multi.py`), and the vendored code runs on Colab's current torch (2.14): `custom_ops` uses `cpp_extension.load()`'s return value, `InfiniteSampler` calls `super().__init__()` without args, Adam betas are floats, and the pre-1.8 torch fallbacks in `misc.py` are gone.
 
 Everything dataset lives in the `dataset_tool/` package: `prepare.py` (the `deepvogue-prepare` CLI — inline ffmpeg frame extraction + avg-hash dedup, no external deps), `convert.py` (NVIDIA's official `convert_dataset` zip-emitter, runnable as `python -m deepVogue.dataset_tool`), and `tools.py` (its vendored helpers). Don't reimplement any of them. The dataPalette repo at `/Users/juan-garassino/Code/005-products/004-creative-tools/004-dataPalette` is *reference only* — not a runtime dependency.
 
